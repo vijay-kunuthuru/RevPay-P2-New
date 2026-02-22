@@ -3,7 +3,7 @@ package com.revpay.controller;
 import com.revpay.model.dto.*;
 import com.revpay.model.entity.Loan;
 import com.revpay.model.entity.LoanInstallment;
-import com.revpay.repository.UserRepository;
+import com.revpay.security.UserDetailsImpl;
 import com.revpay.service.LoanService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -20,19 +20,15 @@ import java.util.List;
 public class LoanController {
 
     private final LoanService loanService;
-    private final UserRepository userRepository;
 
     private Long getUserId(Authentication auth) {
-        return userRepository.findByEmail(auth.getName())
-                .orElseThrow(() -> new RuntimeException("User not found"))
-                .getUserId();
+        return ((UserDetailsImpl) auth.getPrincipal()).getUserId();
     }
 
     @PostMapping("/apply")
     public ResponseEntity<LoanResponseDTO> applyLoan(
             @Valid @RequestBody LoanApplyDTO dto,
             Authentication auth) {
-
         return ResponseEntity.ok(loanService.applyLoan(getUserId(auth), dto));
     }
 
@@ -40,7 +36,6 @@ public class LoanController {
     public ResponseEntity<String> repayLoan(
             @Valid @RequestBody LoanRepayDTO dto,
             Authentication auth) {
-
         return ResponseEntity.ok(loanService.repayLoan(getUserId(auth), dto));
     }
 
@@ -58,7 +53,6 @@ public class LoanController {
     public ResponseEntity<List<LoanInstallment>> viewEmiSchedule(
             @PathVariable Long loanId,
             Authentication auth) {
-
         return ResponseEntity.ok(loanService.getEmiSchedule(getUserId(auth), loanId));
     }
 
@@ -70,19 +64,17 @@ public class LoanController {
     @GetMapping("/analytics")
     public ResponseEntity<LoanAnalyticsDTO> getAnalytics(Authentication auth) {
         Long userId = getUserId(auth);
-        LoanAnalyticsDTO analytics = LoanAnalyticsDTO.builder()
+        return ResponseEntity.ok(LoanAnalyticsDTO.builder()
                 .totalOutstanding(loanService.totalOutstanding(userId))
                 .totalPaid(loanService.totalPaid(userId))
                 .totalPending(loanService.totalPending(userId))
-                .build();
-        return ResponseEntity.ok(analytics);
+                .build());
     }
 
     @PostMapping("/preclose/{loanId}")
     public ResponseEntity<String> preCloseLoan(
             @PathVariable Long loanId,
             Authentication auth) {
-
         return ResponseEntity.ok(loanService.preCloseLoan(getUserId(auth), loanId));
     }
 

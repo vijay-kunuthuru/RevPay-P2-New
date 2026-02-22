@@ -9,8 +9,14 @@ import jakarta.transaction.Transactional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.CannotAcquireLockException;
+import org.springframework.dao.DeadlockLoserDataAccessException;
+import org.springframework.dao.PessimisticLockingFailureException;
+import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Retryable;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -544,5 +550,55 @@ public class WalletService {
                         Collectors.mapping(Transaction::getAmount, Collectors.reducing(BigDecimal.ZERO, BigDecimal::add))));
 
         return new WalletAnalyticsDTO(totalSpent, categories, (long) outgoing.size());
+    }
+
+    @Retryable(
+            retryFor = {CannotAcquireLockException.class, PessimisticLockingFailureException.class},
+            maxAttempts = 3,
+            backoff = @Backoff(delay = 100, multiplier = 2.0)
+    )
+    @Transactional
+    public Transaction addFundsForLoan(Long userId, BigDecimal amount, String description) {
+        Wallet wallet = walletRepository.findByUserUserIdForUpdate(userId)
+                .orElseThrow(() -> new RuntimeException("Wallet not found"));
+        wallet.setBalance(wallet.getBalance().add(amount));
+        walletRepository.save(wallet);
+
+        Transaction tx = new Transaction();
+        tx.setReceiver(wallet.getUser());
+        tx.setAmount(amount);
+        tx.setType(Transaction.TransactionType.LOAN_DISBURSEMENT);
+        tx.setStatus(Transaction.TransactionStatus.COMPLETED);
+        tx.setDescription(description);
+        tx.setTransactionRef(generateRef());
+
+        return transactionRepository.save(tx);
+    }
+
+    @Retryable(
+            retryFor = {CannotAcquireLockException.class, PessimisticLockingFailureException.class},
+            maxAttempts = 3,
+            backoff = @Backoff(delay = 100, multiplier = 2.0)
+    )
+    @Transactional
+    public Transaction withdrawFundsForLoan(Long userId, BigDecimal amount, String description) {
+        Wallet wallet = walletRepository.findByUserUserIdForUpdate(userId)
+                .orElseThrow(() -> new RuntimeException("Wallet not found"));
+        if (wallet.getBalance().compareTo(amount) < 0) {
+            throw new RuntimeException("Insufficient balance for loan repayment");
+        }
+
+        wallet.setBalance(wallet.getBalance().subtract(amount));
+        walletRepository.save(wallet);
+
+        Transaction tx = new Transaction();
+        tx.setSender(wallet.getUser());
+        tx.setAmount(amount);
+        tx.setType(Transaction.TransactionType.LOAN_REPAYMENT);
+        tx.setStatus(Transaction.TransactionStatus.COMPLETED);
+        tx.setDescription(description);
+        tx.setTransactionRef(generateRef());
+
+        return transactionRepository.save(tx);
     }
 }

@@ -45,6 +45,10 @@ public class BusinessProfile {
     @Column(name = "verification_doc_url")
     private String verificationDocUrl;
 
+    @Builder.Default
+    @Column(name = "is_verified", nullable = false)
+    private boolean isVerified = false;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;

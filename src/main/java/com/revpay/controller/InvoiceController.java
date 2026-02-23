@@ -19,6 +19,7 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import java.security.Principal;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -46,13 +47,16 @@ public class InvoiceController {
 
     // --- ENDPOINTS ---
 
-    @PostMapping("/{profileId}/invoices")
-    @Operation(summary = "Create a new invoice", description = "Generates a new invoice for a customer linked to the specified business profile.")
+    @PostMapping("/invoices")
+    @Operation(summary = "Create a new invoice", description = "Generates a new invoice for a customer linked to the logged-in business profile.")
     public ResponseEntity<ApiResponse<InvoiceDTO>> create(
-            @Parameter(description = "ID of the business profile generating the invoice") @PathVariable Long profileId,
+            Principal principal, // ADDED: Grabs the logged-in user securely
             @Valid @RequestBody InvoiceCreateRequest request) {
 
-        log.info("Business ID: {} is creating a new invoice for {}", profileId, request.customerEmail());
+        // The JWT Filter sets the email as the Principal name automatically
+        String loggedInEmail = principal.getName();
+
+        log.info("Business User: {} is creating a new invoice for {}", loggedInEmail, request.customerEmail());
 
         // Securely map the validated DTO to the Entity before passing to the service
         Invoice invoice = new Invoice();
@@ -61,7 +65,8 @@ public class InvoiceController {
         invoice.setTotalAmount(request.totalAmount());
         invoice.setDueDate(request.dueDate());
 
-        Invoice created = invoiceService.createInvoice(profileId, invoice);
+        // FIXED: Pass the email instead of the profileId
+        Invoice created = invoiceService.createInvoice(loggedInEmail, invoice);
 
         InvoiceDTO dto = new InvoiceDTO(
                 created.getId(),

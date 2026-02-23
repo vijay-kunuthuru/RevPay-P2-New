@@ -2,8 +2,7 @@ package com.revpay.model.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
-import org.springframework.data.annotation.CreatedDate;
-import org.springframework.data.jpa.domain.support.AuditingEntityListener;
+import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.LocalDateTime;
 import java.util.Objects;
@@ -17,7 +16,6 @@ import java.util.Objects;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-@EntityListeners(AuditingEntityListener.class)
 public class Notification {
 
     @Id
@@ -35,10 +33,13 @@ public class Notification {
     @Column(nullable = false, length = 50)
     private String type;
 
+    // FIXED: Added @Builder.Default to ensure it initializes as false
+    @Builder.Default
     @Column(name = "is_read", nullable = false)
     private boolean isRead = false;
 
-    @CreatedDate
+    // FIXED: Switched to Hibernate's CreationTimestamp
+    @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 

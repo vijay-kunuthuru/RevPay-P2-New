@@ -4,9 +4,8 @@ import jakarta.persistence.*;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotNull;
 import lombok.*;
-import org.springframework.data.annotation.CreatedDate;
-import org.springframework.data.annotation.LastModifiedDate;
-import org.springframework.data.jpa.domain.support.AuditingEntityListener;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -19,7 +18,6 @@ import java.util.Objects;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-@EntityListeners(AuditingEntityListener.class)
 public class Wallet {
 
     @Id
@@ -32,19 +30,25 @@ public class Wallet {
     @ToString.Exclude
     private User user;
 
+    // FIXED: Added @Builder.Default so Lombok doesn't insert null
+    @Builder.Default
     @NotNull(message = "Balance cannot be null")
     @DecimalMin(value = "0.0", message = "Balance cannot be negative")
     @Column(nullable = false, precision = 19, scale = 4)
     private BigDecimal balance = BigDecimal.ZERO;
 
+    // FIXED: Added @Builder.Default
+    @Builder.Default
     @Column(length = 3, nullable = false)
     private String currency = "INR";
 
-    @CreatedDate
+    // FIXED: Switched to Hibernate's CreationTimestamp for guaranteed execution
+    @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
-    @LastModifiedDate
+    // FIXED: Switched to Hibernate's UpdateTimestamp
+    @UpdateTimestamp
     @Column(name = "last_updated")
     private LocalDateTime lastUpdated;
 

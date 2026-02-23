@@ -1,5 +1,7 @@
 package com.revpay.service;
 
+import com.revpay.exception.ResourceNotFoundException;
+import com.revpay.exception.UnauthorizedException;
 import com.revpay.model.entity.BusinessProfile;
 import com.revpay.model.entity.Invoice;
 import com.revpay.model.entity.User;
@@ -58,9 +60,13 @@ public class InvoiceServiceTest {
         testProfile = new BusinessProfile();
         testProfile.setUser(user);
         testProfile.setBusinessName("Test RevPay Business");
+
+        // FIXED: Mark the test business as verified so the service allows it to create invoices!
+        testProfile.setVerified(true);
+
         testProfile = businessProfileRepository.save(testProfile);
 
-        // FIXED: Build the UserDetailsImpl object exactly as the JwtAuthenticationFilter does
+        // Build the UserDetailsImpl object exactly as the JwtAuthenticationFilter does
         UserDetailsImpl userDetails = UserDetailsImpl.build(user);
 
         // Pass the UserDetails object as the principal
@@ -82,7 +88,8 @@ public class InvoiceServiceTest {
         invoice.setCustomerEmail("test@example.com");
         invoice.setTotalAmount(new BigDecimal("100.00"));
 
-        Invoice savedInvoice = invoiceService.createInvoice(testProfile.getProfileId(), invoice);
+        String businessEmail = testProfile.getUser().getEmail();
+        Invoice savedInvoice = invoiceService.createInvoice(businessEmail, invoice);
 
         assertNotNull(savedInvoice.getId());
         assertEquals(Invoice.InvoiceStatus.DRAFT, savedInvoice.getStatus());
@@ -96,7 +103,8 @@ public class InvoiceServiceTest {
         invoice.setCustomerEmail("test@example.com");
         invoice.setTotalAmount(new BigDecimal("100.00"));
 
-        invoiceService.createInvoice(testProfile.getProfileId(), invoice);
+        String businessEmail = testProfile.getUser().getEmail();
+        invoiceService.createInvoice(businessEmail, invoice);
 
         List<Invoice> result = invoiceService.getAllInvoicesByBusiness(testProfile.getProfileId());
 
@@ -111,7 +119,8 @@ public class InvoiceServiceTest {
         invoice.setCustomerEmail("test@example.com");
         invoice.setTotalAmount(new BigDecimal("100.00"));
 
-        Invoice savedInvoice = invoiceService.createInvoice(testProfile.getProfileId(), invoice);
+        String businessEmail = testProfile.getUser().getEmail();
+        Invoice savedInvoice = invoiceService.createInvoice(businessEmail, invoice);
 
         invoiceService.markAsPaid(savedInvoice.getId());
 
@@ -121,8 +130,28 @@ public class InvoiceServiceTest {
 
     @Test
     void testCreateInvoice_ThrowsExceptionWhenBusinessNotFound() {
-        assertThrows(RuntimeException.class, () -> {
-            invoiceService.createInvoice(999L, new Invoice());
+        assertThrows(ResourceNotFoundException.class, () -> {
+            invoiceService.createInvoice("ghost@nowhere.com", new Invoice());
+        });
+    }
+
+    // NEW TEST: Proves your KYB security lock actually works!
+    @Test
+    void testCreateInvoice_ThrowsExceptionWhenBusinessUnverified() {
+        // 1. Manually set the test profile back to unverified for this specific test
+        testProfile.setVerified(false);
+        businessProfileRepository.save(testProfile);
+
+        Invoice invoice = new Invoice();
+        invoice.setCustomerName("Test Customer");
+        invoice.setCustomerEmail("test@example.com");
+        invoice.setTotalAmount(new BigDecimal("100.00"));
+
+        String businessEmail = testProfile.getUser().getEmail();
+
+        // 2. Expect the UnauthorizedException we just created
+        assertThrows(UnauthorizedException.class, () -> {
+            invoiceService.createInvoice(businessEmail, invoice);
         });
     }
 }

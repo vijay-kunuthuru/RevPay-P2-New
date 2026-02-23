@@ -79,16 +79,20 @@ public class AdminController {
     public ResponseEntity<ApiResponse<String>> verifyBusiness(@PathVariable Long id) {
         log.info("Admin initiating verification for business profile ID: {}", id);
 
-        // Replaced generic RuntimeException with our specific ResourceNotFoundException
         BusinessProfile profile = businessProfileRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Business profile not found with ID: " + id));
 
-        // Note: Assuming you will add a verification status field to BusinessProfile later.
-        // For example:
-        // profile.setVerified(true);
-        // businessProfileRepository.save(profile);
+        // NEW: Check if it's already verified to prevent redundant updates
+        if (profile.isVerified()) {
+            log.info("Business profile ID: {} is already verified.", id);
+            return ResponseEntity.badRequest().body(ApiResponse.error("VAL_002", "Business is already verified."));
+        }
+
+        // UNCOMMENTED: The actual verification logic!
+        profile.setVerified(true);
+        businessProfileRepository.save(profile);
 
         log.info("Business profile ID: {} verified successfully.", id);
-        return ResponseEntity.ok(ApiResponse.success("Business account verified successfully.", "Verification complete"));
+        return ResponseEntity.ok(ApiResponse.success("Verification complete", "Business account verified successfully."));
     }
 }

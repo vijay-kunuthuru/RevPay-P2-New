@@ -49,10 +49,20 @@ public class InvoiceService {
     // ==============================
 
     @Transactional
-    public Invoice createInvoice(Long profileId, Invoice invoice) {
-        // Validation now returns the profile, preventing a redundant database hit
-        BusinessProfile business = getAndValidateBusinessProfile(profileId);
+    public Invoice createInvoice(String userEmail, Invoice invoice) {
 
+        // 1. Securely fetch the profile
+        BusinessProfile business = businessProfileRepository.findByUserEmail(userEmail)
+                .orElseThrow(() -> new ResourceNotFoundException("Business profile not found for email: " + userEmail));
+
+        // ---> 2. THE NEW FRAUD PREVENTION LOCK <---
+        if (!business.isVerified()) {
+            log.warn("FRAUD_PREVENTION | Unverified business attempted to create invoice. Email: {}", userEmail);
+            throw new UnauthorizedException("Your business account is pending admin verification. You cannot issue invoices yet.");
+        }
+        // ------------------------------------------
+
+        // 3. Proceed with invoice creation only if verified
         invoice.setBusinessProfile(business);
 
         if (invoice.getStatus() == null) {
@@ -61,7 +71,7 @@ public class InvoiceService {
 
         Invoice savedInvoice = invoiceRepository.save(invoice);
 
-        log.info("INVOICE_CREATED | ID: {} | Business Profile ID: {}", savedInvoice.getId(), profileId);
+        log.info("INVOICE_CREATED | ID: {} | Business Profile ID: {}", savedInvoice.getId(), business.getProfileId());
         return savedInvoice;
     }
 

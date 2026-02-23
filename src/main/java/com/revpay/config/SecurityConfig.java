@@ -87,9 +87,9 @@ public class SecurityConfig {
                                 "/v3/api-docs/swagger-config"
                         ).permitAll()
 
-                        // Public APIs
-                        .requestMatchers("/api/auth/**").permitAll()
-                        .requestMatchers("/api/public/**").permitAll()
+                        // FIXED: Added /v1/ to match your actual controller endpoints!
+                        .requestMatchers("/api/v1/auth/**").permitAll()
+                        .requestMatchers("/api/v1/public/**").permitAll()
 
                         // Everything else must be secured with a JWT
                         .anyRequest().authenticated()

@@ -19,4 +19,6 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
 
     Page<Invoice> findByStatus(Invoice.InvoiceStatus status, Pageable pageable);
 
+    Page<Invoice> findByCustomerEmail(String customerEmail, Pageable pageable);
+
 }

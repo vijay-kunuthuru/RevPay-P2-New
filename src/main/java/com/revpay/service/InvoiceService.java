@@ -4,8 +4,10 @@ import com.revpay.exception.ResourceNotFoundException;
 import com.revpay.exception.UnauthorizedException;
 import com.revpay.model.entity.BusinessProfile;
 import com.revpay.model.entity.Invoice;
+import com.revpay.model.entity.User;
 import com.revpay.repository.BusinessProfileRepository;
 import com.revpay.repository.InvoiceRepository;
+import com.revpay.repository.UserRepository;
 import com.revpay.security.UserDetailsImpl;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -25,6 +27,11 @@ public class InvoiceService {
 
     private final InvoiceRepository invoiceRepository;
     private final BusinessProfileRepository businessProfileRepository;
+
+    // --> NEW DEPENDENCIES FOR TRACK 3.5 <--
+    private final UserRepository userRepository;
+    private final WalletService walletService;
+    private final NotificationService notificationService;
 
     // ==============================
     // ADMIN METHODS
@@ -51,18 +58,14 @@ public class InvoiceService {
     @Transactional
     public Invoice createInvoice(String userEmail, Invoice invoice) {
 
-        // 1. Securely fetch the profile
         BusinessProfile business = businessProfileRepository.findByUserEmail(userEmail)
                 .orElseThrow(() -> new ResourceNotFoundException("Business profile not found for email: " + userEmail));
 
-        // ---> 2. THE NEW FRAUD PREVENTION LOCK <---
         if (!business.isVerified()) {
             log.warn("FRAUD_PREVENTION | Unverified business attempted to create invoice. Email: {}", userEmail);
             throw new UnauthorizedException("Your business account is pending admin verification. You cannot issue invoices yet.");
         }
-        // ------------------------------------------
 
-        // 3. Proceed with invoice creation only if verified
         invoice.setBusinessProfile(business);
 
         if (invoice.getStatus() == null) {
@@ -81,18 +84,81 @@ public class InvoiceService {
 
     @Transactional(readOnly = true)
     public List<Invoice> getAllInvoicesByBusiness(Long profileId) {
-        getAndValidateBusinessProfile(profileId); // Validates ownership
+        getAndValidateBusinessProfile(profileId);
         return invoiceRepository.findByBusinessProfile_ProfileId(profileId);
     }
 
     @Transactional(readOnly = true)
     public Page<Invoice> getAllInvoicesByBusiness(Long profileId, Pageable pageable) {
-        getAndValidateBusinessProfile(profileId); // Validates ownership
+        getAndValidateBusinessProfile(profileId);
         return invoiceRepository.findByBusinessProfile_ProfileId(profileId, pageable);
     }
 
     // ==============================
-    // MARK AS PAID
+    // SEND INVOICE TO CUSTOMER
+    // ==============================
+
+    @Transactional
+    public void sendInvoice(Long invoiceId) {
+        Invoice invoice = invoiceRepository.findById(invoiceId)
+                .orElseThrow(() -> new ResourceNotFoundException("Invoice not found"));
+
+        getAndValidateBusinessProfile(invoice.getBusinessProfile().getProfileId());
+
+        if (invoice.getStatus() != Invoice.InvoiceStatus.DRAFT) {
+            throw new IllegalStateException("Only DRAFT invoices can be sent.");
+        }
+
+        invoice.setStatus(Invoice.InvoiceStatus.SENT);
+        invoiceRepository.save(invoice);
+
+        userRepository.findByEmail(invoice.getCustomerEmail()).ifPresentOrElse(
+                customer -> {
+                    notificationService.createNotification(
+                            customer.getUserId(),
+                            "You have a new invoice of ₹" + invoice.getTotalAmount() + " from " + invoice.getCustomerName(), // MESSAGE GOES SECOND
+                            "INVOICE" // TYPE GOES THIRD
+                    );
+                    log.info("INVOICE_NOTIFICATION | Sent alert to User ID: {}", customer.getUserId());
+                },
+                () -> log.warn("INVOICE_SENT | Customer email {} not registered in RevPay yet.", invoice.getCustomerEmail())
+        );
+
+        log.info("INVOICE_SENT | Invoice {} status updated to SENT", invoiceId);
+    }
+
+    // ==============================
+    // PAY INVOICE VIA WALLET
+    // ==============================
+
+    @Transactional
+    public void payInvoiceViaWallet(Long invoiceId, Long customerUserId, String pin) {
+        Invoice invoice = invoiceRepository.findById(invoiceId)
+                .orElseThrow(() -> new ResourceNotFoundException("Invoice not found"));
+
+        if (invoice.getStatus() == Invoice.InvoiceStatus.PAID) {
+            throw new IllegalStateException("Invoice is already paid.");
+        }
+        if (invoice.getStatus() != Invoice.InvoiceStatus.SENT) {
+            throw new IllegalStateException("Invoice must be SENT before it can be paid.");
+        }
+
+        User customer = userRepository.findById(customerUserId)
+                .orElseThrow(() -> new ResourceNotFoundException("Customer user not found"));
+
+        if (!customer.getEmail().equalsIgnoreCase(invoice.getCustomerEmail())) {
+            log.warn("FRAUD_PREVENTION | User {} attempted to pay invoice belonging to {}", customer.getEmail(), invoice.getCustomerEmail());
+            throw new UnauthorizedException("You are not authorized to pay this invoice.");
+        }
+
+        // The Magic! Triggers your existing secure logic in WalletService
+        walletService.payInvoice(customerUserId, invoiceId, pin);
+
+        log.info("INVOICE_PAID_VIA_WALLET | Invoice {} paid by User {}", invoiceId, customerUserId);
+    }
+
+    // ==============================
+    // MARK AS PAID (MANUAL / CASH)
     // ==============================
 
     @Transactional
@@ -100,10 +166,7 @@ public class InvoiceService {
         Invoice invoice = invoiceRepository.findById(invoiceId)
                 .orElseThrow(() -> new ResourceNotFoundException("Invoice not found"));
 
-        Long profileId = invoice.getBusinessProfile().getProfileId();
-
-        // Ensure the person marking it paid actually owns the business
-        getAndValidateBusinessProfile(profileId);
+        getAndValidateBusinessProfile(invoice.getBusinessProfile().getProfileId());
 
         if (invoice.getStatus() == Invoice.InvoiceStatus.PAID) {
             log.warn("INVOICE_IDEMPOTENCY | Invoice {} is already marked as PAID", invoiceId);
@@ -113,7 +176,7 @@ public class InvoiceService {
         invoice.setStatus(Invoice.InvoiceStatus.PAID);
         invoiceRepository.save(invoice);
 
-        log.info("INVOICE_STATUS_UPDATE | Invoice {} marked as PAID", invoiceId);
+        log.info("INVOICE_STATUS_UPDATE | Invoice {} marked as PAID manually", invoiceId);
     }
 
     // ==============================
@@ -136,9 +199,6 @@ public class InvoiceService {
         }
     }
 
-    /**
-     * Validates that the logged-in user owns the business profile, and returns it to avoid double-querying.
-     */
     private BusinessProfile getAndValidateBusinessProfile(Long profileId) {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
 
@@ -152,7 +212,6 @@ public class InvoiceService {
         boolean isAdmin = auth.getAuthorities().stream()
                 .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
 
-        // Admins can bypass ownership checks
         if (isAdmin) {
             return profile;
         }
@@ -171,5 +230,15 @@ public class InvoiceService {
         }
 
         return profile;
+    }
+
+    // ==============================
+    // GET CUSTOMER INVOICES
+    // ==============================
+
+    @Transactional(readOnly = true)
+    public Page<Invoice> getMyInvoices(String customerEmail, Pageable pageable) {
+        log.info("Fetching invoices for customer email: {}", customerEmail);
+        return invoiceRepository.findByCustomerEmail(customerEmail, pageable);
     }
 }

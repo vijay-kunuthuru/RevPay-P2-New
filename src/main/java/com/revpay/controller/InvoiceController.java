@@ -34,38 +34,29 @@ public class InvoiceController {
 
     private final InvoiceService invoiceService;
 
-    // --- DTOs (Defined directly in the controller for scoped use) ---
-
     public record InvoiceDTO(Long id, Long businessId, String customerName, String customerEmail, BigDecimal totalAmount, LocalDate dueDate, String status) {}
 
-    // Request DTO to prevent Mass Assignment vulnerabilities (No description field)
     public record InvoiceCreateRequest(
             @NotBlank(message = "Customer name is required") String customerName,
             @Email @NotBlank(message = "Valid customer email is required") String customerEmail,
             @NotNull @Positive(message = "Amount must be greater than zero") BigDecimal totalAmount,
             @NotNull LocalDate dueDate) {}
 
-    // --- ENDPOINTS ---
-
     @PostMapping("/invoices")
     @Operation(summary = "Create a new invoice", description = "Generates a new invoice for a customer linked to the logged-in business profile.")
     public ResponseEntity<ApiResponse<InvoiceDTO>> create(
-            Principal principal, // ADDED: Grabs the logged-in user securely
+            Principal principal,
             @Valid @RequestBody InvoiceCreateRequest request) {
 
-        // The JWT Filter sets the email as the Principal name automatically
         String loggedInEmail = principal.getName();
-
         log.info("Business User: {} is creating a new invoice for {}", loggedInEmail, request.customerEmail());
 
-        // Securely map the validated DTO to the Entity before passing to the service
         Invoice invoice = new Invoice();
         invoice.setCustomerName(request.customerName());
         invoice.setCustomerEmail(request.customerEmail());
         invoice.setTotalAmount(request.totalAmount());
         invoice.setDueDate(request.dueDate());
 
-        // FIXED: Pass the email instead of the profileId
         Invoice created = invoiceService.createInvoice(loggedInEmail, invoice);
 
         InvoiceDTO dto = new InvoiceDTO(
@@ -78,7 +69,6 @@ public class InvoiceController {
                 created.getStatus().name()
         );
 
-        log.info("Invoice ID: {} created successfully.", created.getId());
         return ResponseEntity.ok(ApiResponse.success(dto, "Invoice created successfully"));
     }
 
@@ -87,8 +77,6 @@ public class InvoiceController {
     public ResponseEntity<ApiResponse<Page<InvoiceDTO>>> getInvoices(
             @Parameter(description = "ID of the business profile") @PathVariable Long profileId,
             @PageableDefault(size = 10) Pageable pageable) {
-
-        log.debug("Fetching invoices for business ID: {}. Page: {}, Size: {}", profileId, pageable.getPageNumber(), pageable.getPageSize());
 
         Page<Invoice> invoices = invoiceService.getAllInvoicesByBusiness(profileId, pageable);
 
@@ -105,15 +93,24 @@ public class InvoiceController {
         return ResponseEntity.ok(ApiResponse.success(dtos, "Invoices retrieved successfully"));
     }
 
+    // ---> NEW SEND ENDPOINT <---
+    @PostMapping("/invoices/{id}/send")
+    @Operation(summary = "Send an invoice", description = "Changes invoice status from DRAFT to SENT and notifies the customer.")
+    public ResponseEntity<ApiResponse<String>> sendInvoice(
+            @Parameter(description = "ID of the invoice to send") @PathVariable Long id) {
+
+        log.info("Business is sending invoice ID: {} to customer", id);
+        invoiceService.sendInvoice(id);
+
+        return ResponseEntity.ok(ApiResponse.success(null, "Invoice sent successfully via email/notification"));
+    }
+
     @PatchMapping("/invoices/{id}/pay")
-    @Operation(summary = "Mark invoice as paid", description = "Manually updates the status of an invoice to PAID.")
+    @Operation(summary = "Mark invoice as paid", description = "Manually updates the status of an invoice to PAID (For Cash/Offline payments).")
     public ResponseEntity<ApiResponse<String>> markPaid(
             @Parameter(description = "ID of the invoice to update") @PathVariable Long id) {
 
-        log.info("Manual status override: Marking invoice ID: {} as PAID", id);
-
         invoiceService.markAsPaid(id);
-
-        return ResponseEntity.ok(ApiResponse.success(null, "Invoice updated to PAID status"));
+        return ResponseEntity.ok(ApiResponse.success(null, "Invoice updated to PAID status manually"));
     }
 }

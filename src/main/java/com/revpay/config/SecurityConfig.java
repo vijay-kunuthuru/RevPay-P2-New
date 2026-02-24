@@ -88,7 +88,12 @@ public class SecurityConfig {
                         ).permitAll()
 
                         // FIXED: Added /v1/ to match your actual controller endpoints!
-                        .requestMatchers("/api/v1/auth/**").permitAll()
+                        .requestMatchers(
+                                "/api/v1/auth/register",
+                                "/api/v1/auth/login",
+                                "/api/v1/auth/forgot-password",
+                                "/api/v1/auth/reset-password"
+                        ).permitAll()
                         .requestMatchers("/api/v1/public/**").permitAll()
 
                         // Everything else must be secured with a JWT

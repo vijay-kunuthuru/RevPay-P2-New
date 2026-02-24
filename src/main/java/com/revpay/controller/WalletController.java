@@ -221,7 +221,12 @@ public class WalletController {
         card.setCardNumber(payload.cardNumber());
         card.setExpiryDate(payload.expiryDate());
         card.setBillingAddress(payload.billingAddress());
-        // cardType and CVV can be mapped here based on your entity structure
+
+        // 🚀 ADD THESE TWO LINES TO FIX THE BUG:
+        card.setCvv(payload.cvv());
+        if (payload.cardType() != null) {
+            card.setCardType(PaymentMethod.CardType.valueOf(payload.cardType().toUpperCase()));
+        }
 
         PaymentMethod savedCard = walletService.addCard(getAuthenticatedUser(auth).getUserId(), card);
         return ResponseEntity.ok(ApiResponse.success(mapCard(savedCard), "Card linked successfully"));

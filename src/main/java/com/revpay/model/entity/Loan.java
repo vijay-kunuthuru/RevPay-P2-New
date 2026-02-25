@@ -50,6 +50,18 @@ public class Loan {
     @Column(length = 255)
     private String purpose;
 
+    @Column(name = "supporting_document_url")
+    private String supportingDocumentUrl;
+
+    @Column(name = "idempotency_key", unique = true)
+    private String idempotencyKey;
+
+    @Column(name = "loan_type", length = 50)
+    private String loanType;
+
+    @Column(length = 10)
+    private String currency;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private LoanStatus status;
@@ -85,4 +97,6 @@ public class Loan {
     public int hashCode() {
         return Objects.hash(loanId);
     }
+
+
 }

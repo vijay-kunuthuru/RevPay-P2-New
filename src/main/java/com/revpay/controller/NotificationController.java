@@ -2,6 +2,7 @@ package com.revpay.controller;
 
 import com.revpay.exception.ResourceNotFoundException;
 import com.revpay.model.dto.ApiResponse;
+import com.revpay.model.dto.NotificationPreferenceRequest;
 import com.revpay.model.entity.Notification;
 import com.revpay.model.entity.User;
 import com.revpay.repository.UserRepository;
@@ -92,5 +93,24 @@ public class NotificationController {
         );
 
         return ResponseEntity.ok(ApiResponse.success(null, "Test notification created successfully"));
+    }
+
+    @PutMapping("/preferences")
+    @Operation(summary = "Update notification preference",
+            description = "Enable or disable a specific notification type for the authenticated user.")
+    public ResponseEntity<ApiResponse<String>> updatePreference(
+            Authentication auth,
+            @RequestBody NotificationPreferenceRequest request) {
+
+        User user = getAuthenticatedUser(auth);
+
+        service.updateNotificationPreference(
+                user.getUserId(),
+                request.getType(),
+                request.isEnabled()
+        );
+
+        return ResponseEntity.ok(
+                ApiResponse.success(null, "Notification preference updated successfully"));
     }
 }

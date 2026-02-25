@@ -147,4 +147,54 @@ public class AuthService {
         businessRepository.save(profile);
         log.debug("BUSINESS_PROFILE_CREATED | Linked to UserID: {}", user.getUserId());
     }
+
+    @Transactional
+    public void updateProfile(Long userId, SignupRequest request) {
+        log.info("PROFILE_UPDATE_ATTEMPT | Processing for UserID: {}", userId);
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User session is invalid."));
+
+        // Check email uniqueness if changed
+        if (!user.getEmail().equals(request.getEmail())
+                && userRepository.existsByEmail(request.getEmail())) {
+            log.warn("PROFILE_UPDATE_FAILED | Email already exists: {}", request.getEmail());
+            throw new UserAlreadyExistsException("The email address is already registered.");
+        }
+
+        // Check phone uniqueness if changed
+        if (!user.getPhoneNumber().equals(request.getPhoneNumber())
+                && userRepository.existsByPhoneNumber(request.getPhoneNumber())) {
+            log.warn("PROFILE_UPDATE_FAILED | Phone number already exists: {}", request.getPhoneNumber());
+            throw new UserAlreadyExistsException("The phone number is already in use.");
+        }
+
+        // Update basic fields
+        user.setFullName(request.getFullName());
+        user.setEmail(request.getEmail());
+        user.setPhoneNumber(request.getPhoneNumber());
+
+        userRepository.save(user);
+
+        log.info("PROFILE_UPDATE_SUCCESS | UserID: {} profile updated successfully.", userId);
+    }
+
+    @Transactional
+    public void updateTransactionPin(Long userId, UpdatePasswordRequest request) {
+        log.info("TRANSACTION_PIN_UPDATE_ATTEMPT | Processing for UserID: {}", userId);
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User session is invalid."));
+
+        // Verify old transaction PIN
+        if (!passwordEncoder.matches(request.getOldPassword(), user.getTransactionPinHash())) {
+            log.warn("TRANSACTION_PIN_UPDATE_FAILED | Current PIN mismatch for UserID: {}", userId);
+            throw new UnauthorizedException("The current transaction PIN provided is incorrect.");
+        }
+
+        user.setTransactionPinHash(passwordEncoder.encode(request.getNewPassword()));
+        userRepository.save(user);
+
+        log.info("TRANSACTION_PIN_UPDATE_SUCCESS | UserID: {} updated transaction PIN successfully.", userId);
+    }
 }

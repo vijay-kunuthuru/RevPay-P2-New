@@ -8,6 +8,8 @@ import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
+import java.util.HashSet;
+import java.util.Set;
 
 import java.time.LocalDateTime;
 import java.util.Objects;
@@ -100,4 +102,7 @@ public class User {
     public int hashCode() {
         return Objects.hash(userId);
     }
+
+    @ElementCollection
+    private Set<String> disabledNotificationTypes = new HashSet<>();
 }

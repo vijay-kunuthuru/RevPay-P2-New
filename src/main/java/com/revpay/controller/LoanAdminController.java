@@ -14,7 +14,9 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import com.revpay.security.UserDetailsImpl;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -30,16 +32,27 @@ public class LoanAdminController {
     private final LoanService loanService;
 
     // --- DTOs ---
-    public record LoanDTO(Long loanId, Long userId, BigDecimal amount, BigDecimal interestRate, Integer tenureMonths, BigDecimal emiAmount, BigDecimal remainingAmount, String purpose, String status, LocalDate startDate, LocalDate endDate) {}
+    public record LoanDTO(Long loanId, Long userId, String applicantName, BigDecimal amount, BigDecimal interestRate,
+            Integer tenureMonths,
+            BigDecimal emiAmount, BigDecimal remainingAmount, String purpose, String status, LocalDate startDate,
+            LocalDate endDate) {
+    }
 
     // --- ENDPOINTS ---
 
+    // Helper method to extract the authenticated user's ID
+    private Long getUserId(Authentication auth) {
+        return ((UserDetailsImpl) auth.getPrincipal()).getUserId();
+    }
+
     @PostMapping("/approve")
     @Operation(summary = "Approve or Reject Loan", description = "Processes a loan application based on admin decision. If approved, funds are automatically disbursed to the user's wallet.")
-    public ResponseEntity<ApiResponse<String>> approveLoan(@Valid @RequestBody LoanApprovalDTO dto) {
+    public ResponseEntity<ApiResponse<String>> approveLoan(@Valid @RequestBody LoanApprovalDTO dto,
+            Authentication auth) {
         log.info("Admin initiated loan approval process for Loan ID: {}", dto.getLoanId());
 
-        String result = loanService.approveLoan(dto);
+        Long adminId = getUserId(auth);
+        String result = loanService.approveLoan(adminId, dto);
 
         log.info("Loan approval process completed for Loan ID: {}. Result: {}", dto.getLoanId(), result);
         return ResponseEntity.ok(ApiResponse.success(result, "Loan approval process completed"));
@@ -48,13 +61,15 @@ public class LoanAdminController {
     @GetMapping("/all")
     @Operation(summary = "Get all platform loans", description = "Retrieves a paginated list of all loans across the RevPay platform for administrative oversight.")
     public ResponseEntity<ApiResponse<Page<LoanDTO>>> getAllLoans(@PageableDefault(size = 10) Pageable pageable) {
-        log.debug("Admin requested all system loans. Page: {}, Size: {}", pageable.getPageNumber(), pageable.getPageSize());
+        log.debug("Admin requested all system loans. Page: {}, Size: {}", pageable.getPageNumber(),
+                pageable.getPageSize());
 
         Page<Loan> loans = loanService.getAllLoansPaged(pageable);
 
         Page<LoanDTO> dtos = loans.map(l -> new LoanDTO(
                 l.getLoanId(),
                 l.getUser().getUserId(),
+                l.getUser().getFullName(),
                 l.getAmount(),
                 l.getInterestRate(),
                 l.getTenureMonths(),
@@ -63,8 +78,7 @@ public class LoanAdminController {
                 l.getPurpose(),
                 l.getStatus().name(),
                 l.getStartDate(),
-                l.getEndDate()
-        ));
+                l.getEndDate()));
 
         return ResponseEntity.ok(ApiResponse.success(dtos, "All system loans retrieved successfully"));
     }

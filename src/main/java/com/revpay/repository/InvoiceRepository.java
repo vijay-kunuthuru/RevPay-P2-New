@@ -21,4 +21,5 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
 
     Page<Invoice> findByCustomerEmail(String customerEmail, Pageable pageable);
 
+    java.util.Optional<Invoice> findByLinkedTransactionId(Long linkedTransactionId);
 }

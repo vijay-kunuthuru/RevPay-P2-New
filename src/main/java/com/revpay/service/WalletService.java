@@ -69,7 +69,8 @@ public class WalletService {
         BigDecimal totalSentToday = transactionRepository.findBySenderOrReceiverOrderByTimestampDesc(sender, sender)
                 .stream()
                 .filter(t -> t.getSender() != null && t.getSender().getUserId().equals(sender.getUserId()))
-                .filter(t -> t.getType() == Transaction.TransactionType.SEND || t.getType() == Transaction.TransactionType.INVOICE_PAYMENT)
+                .filter(t -> t.getType() == Transaction.TransactionType.SEND
+                        || t.getType() == Transaction.TransactionType.INVOICE_PAYMENT)
                 .filter(t -> t.getStatus() == Transaction.TransactionStatus.COMPLETED)
                 .filter(t -> t.getTimestamp().isAfter(startOfDay) && t.getTimestamp().isBefore(endOfDay))
                 .map(Transaction::getAmount)
@@ -86,8 +87,7 @@ public class WalletService {
             notificationService.createNotification(
                     wallet.getUser().getUserId(),
                     NotificationUtil.lowBalanceAlert(wallet.getBalance()),
-                    "WALLET"
-            );
+                    "WALLET");
             log.warn("Low balance alert sent to userId: {}", wallet.getUser().getUserId());
         }
     }
@@ -134,8 +134,10 @@ public class WalletService {
 
     @Transactional
     public Transaction requestMoney(Long requesterId, String targetEmail, BigDecimal amount) {
-        User requester = userRepository.findById(requesterId).orElseThrow(() -> new ResourceNotFoundException("Requester not found"));
-        User target = userRepository.findByEmail(targetEmail).orElseThrow(() -> new ResourceNotFoundException("Target user not found"));
+        User requester = userRepository.findById(requesterId)
+                .orElseThrow(() -> new ResourceNotFoundException("Requester not found"));
+        User target = userRepository.findByEmail(targetEmail)
+                .orElseThrow(() -> new ResourceNotFoundException("Target user not found"));
 
         Transaction request = new Transaction();
         request.setSender(target);
@@ -177,11 +179,17 @@ public class WalletService {
         request.setStatus(Transaction.TransactionStatus.COMPLETED);
         Transaction updatedRequest = transactionRepository.save(request);
 
+        invoiceRepository.findByLinkedTransactionId(transactionId).ifPresent(invoice -> {
+            log.info("INVOICE_AUTO_PAID | Linked invoice {} found for request {}. Marking as PAID.", invoice.getId(),
+                    transactionId);
+            invoice.setStatus(Invoice.InvoiceStatus.PAID);
+            invoiceRepository.save(invoice);
+        });
+
         notificationService.createNotification(
                 request.getReceiver().getUserId(),
                 NotificationUtil.requestAccepted(request.getAmount()),
-                "REQUEST"
-        );
+                "REQUEST");
 
         log.info("Request {} accepted and fulfilled successfully", transactionId);
         return updatedRequest;
@@ -208,8 +216,7 @@ public class WalletService {
         notificationService.createNotification(
                 request.getSender().getUserId(),
                 NotificationUtil.requestDeclined(request.getAmount()),
-                "REQUEST"
-        );
+                "REQUEST");
 
         log.info("Request {} declined successfully", transactionId);
         return request;
@@ -271,15 +278,14 @@ public class WalletService {
                 .orElseThrow(() -> new ResourceNotFoundException("Wallet not found"));
     }
 
-    @Retryable(
-            retryFor = {CannotAcquireLockException.class, PessimisticLockingFailureException.class, DeadlockLoserDataAccessException.class},
-            maxAttempts = 3,
-            backoff = @Backoff(delay = 100, multiplier = 2.0)
-    )
+    @Retryable(retryFor = { CannotAcquireLockException.class, PessimisticLockingFailureException.class,
+            DeadlockLoserDataAccessException.class }, maxAttempts = 3, backoff = @Backoff(delay = 100, multiplier = 2.0))
     @Transactional
     public Transaction sendMoney(Long senderId, TransactionRequest request) {
-        User sender = userRepository.findById(senderId).orElseThrow(() -> new ResourceNotFoundException("Sender not found"));
-        User receiver = userRepository.findByEmail(request.getReceiverIdentifier()).orElseThrow(() -> new ResourceNotFoundException("Receiver not found"));
+        User sender = userRepository.findById(senderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Sender not found"));
+        User receiver = userRepository.findByEmail(request.getReceiverIdentifier())
+                .orElseThrow(() -> new ResourceNotFoundException("Receiver not found"));
 
         if (senderId.equals(receiver.getUserId())) {
             throw new IllegalStateException("You cannot send money to yourself.");
@@ -326,13 +332,15 @@ public class WalletService {
         tx.setType(Transaction.TransactionType.SEND);
         tx.setStatus(Transaction.TransactionStatus.COMPLETED);
         tx.setTransactionRef(generateRef());
-        tx.setDescription(request.getDescription() != null ? request.getDescription() : "Transfer to " + request.getReceiverIdentifier());
+        tx.setDescription(request.getDescription() != null ? request.getDescription()
+                : "Transfer to " + request.getReceiverIdentifier());
         tx.setTimestamp(LocalDateTime.now()); // Ensure timestamp is set before saving
 
         // Save transaction FIRST
         Transaction savedTx = transactionRepository.save(tx);
 
-        // Publish event for Async Notification processing using Builder to match your DTO perfectly
+        // Publish event for Async Notification processing using Builder to match your
+        // DTO perfectly
         eventPublisher.publishEvent(TransferCompletedEvent.builder()
                 .transactionId(savedTx.getTransactionId())
                 .senderId(sender.getUserId())
@@ -347,13 +355,10 @@ public class WalletService {
         return savedTx;
     }
 
-    @Retryable(
-            retryFor = {CannotAcquireLockException.class, PessimisticLockingFailureException.class},
-            maxAttempts = 3,
-            backoff = @Backoff(delay = 100, multiplier = 2.0)
-    )
+    @Retryable(retryFor = { CannotAcquireLockException.class,
+            PessimisticLockingFailureException.class }, maxAttempts = 3, backoff = @Backoff(delay = 100, multiplier = 2.0))
     @Transactional
-    public Transaction addFunds(Long userId, BigDecimal amount, String description) {
+    public Transaction addFunds(Long userId, BigDecimal amount, Long cardId, String description) {
         User user = userRepository.findById(userId).orElseThrow(() -> new ResourceNotFoundException("User not found"));
         Wallet wallet = walletRepository.findByUserUserIdForUpdate(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Wallet not found"));
@@ -373,11 +378,8 @@ public class WalletService {
         return transactionRepository.save(tx);
     }
 
-    @Retryable(
-            retryFor = {CannotAcquireLockException.class, PessimisticLockingFailureException.class},
-            maxAttempts = 3,
-            backoff = @Backoff(delay = 100, multiplier = 2.0)
-    )
+    @Retryable(retryFor = { CannotAcquireLockException.class,
+            PessimisticLockingFailureException.class }, maxAttempts = 3, backoff = @Backoff(delay = 100, multiplier = 2.0))
     @Transactional
     public Transaction withdrawFunds(Long userId, BigDecimal amount) {
         User user = userRepository.findById(userId).orElseThrow(() -> new ResourceNotFoundException("User not found"));
@@ -405,11 +407,8 @@ public class WalletService {
         return transactionRepository.save(tx);
     }
 
-    @Retryable(
-            retryFor = {CannotAcquireLockException.class, PessimisticLockingFailureException.class},
-            maxAttempts = 3,
-            backoff = @Backoff(delay = 100, multiplier = 2.0)
-    )
+    @Retryable(retryFor = { CannotAcquireLockException.class,
+            PessimisticLockingFailureException.class }, maxAttempts = 3, backoff = @Backoff(delay = 100, multiplier = 2.0))
     @Transactional
     public Transaction payInvoice(Long userId, Long invoiceId, String pin) {
         User user = userRepository.findById(userId).orElseThrow(() -> new ResourceNotFoundException("User not found"));
@@ -417,7 +416,8 @@ public class WalletService {
             throw new UnauthorizedException("Invalid PIN!");
         }
 
-        Invoice invoice = invoiceRepository.findById(invoiceId).orElseThrow(() -> new ResourceNotFoundException("Invoice not found"));
+        Invoice invoice = invoiceRepository.findById(invoiceId)
+                .orElseThrow(() -> new ResourceNotFoundException("Invoice not found"));
 
         if (invoice.getStatus() == Invoice.InvoiceStatus.PAID) {
             throw new InvalidStatusException("This invoice has already been paid.");
@@ -431,7 +431,8 @@ public class WalletService {
         }
 
         // ADDED FIX: Ensure money goes into the business wallet
-        Wallet businessWallet = walletRepository.findByUserUserIdForUpdate(invoice.getBusinessProfile().getUser().getUserId())
+        Wallet businessWallet = walletRepository
+                .findByUserUserIdForUpdate(invoice.getBusinessProfile().getUser().getUserId())
                 .orElseThrow(() -> new ResourceNotFoundException("Business wallet not found"));
 
         wallet.setBalance(wallet.getBalance().subtract(invoice.getTotalAmount()));
@@ -454,7 +455,8 @@ public class WalletService {
         tx.setTransactionRef(generateRef());
         tx.setDescription("Payment for Invoice #" + invoiceId);
 
-        notificationService.createNotification(userId, NotificationUtil.invoicePaid(invoice.getTotalAmount()), "INVOICE");
+        notificationService.createNotification(userId, NotificationUtil.invoicePaid(invoice.getTotalAmount()),
+                "INVOICE");
         return transactionRepository.save(tx);
     }
 
@@ -466,7 +468,8 @@ public class WalletService {
 
         boolean exists = paymentMethodRepository.findByUser(user).stream()
                 .anyMatch(c -> c.getCardNumber().equals(card.getCardNumber()));
-        if (exists) throw new IllegalStateException("This card is already linked to your account.");
+        if (exists)
+            throw new IllegalStateException("This card is already linked to your account.");
 
         card.setUser(user);
 
@@ -548,32 +551,40 @@ public class WalletService {
     // --- 6. FILTERING & SEARCH METHODS ---
 
     @Transactional(readOnly = true)
-    public List<Transaction> filterTransactions(Long userId, String type, LocalDateTime startDate, LocalDateTime endDate, String status, BigDecimal minAmount, BigDecimal maxAmount) {
+    public List<Transaction> filterTransactions(Long userId, String type, LocalDateTime startDate,
+            LocalDateTime endDate, String status, BigDecimal minAmount, BigDecimal maxAmount) {
         List<Transaction> transactions = getTransactionHistory(userId);
 
         if (type != null && !type.isEmpty()) {
-            transactions = transactions.stream().filter(t -> t.getType().name().equalsIgnoreCase(type)).collect(Collectors.toList());
+            transactions = transactions.stream().filter(t -> t.getType().name().equalsIgnoreCase(type))
+                    .collect(Collectors.toList());
         }
         if (status != null && !status.isEmpty()) {
-            transactions = transactions.stream().filter(t -> t.getStatus().name().equalsIgnoreCase(status)).collect(Collectors.toList());
+            transactions = transactions.stream().filter(t -> t.getStatus().name().equalsIgnoreCase(status))
+                    .collect(Collectors.toList());
         }
         if (startDate != null) {
-            transactions = transactions.stream().filter(t -> t.getTimestamp().isAfter(startDate)).collect(Collectors.toList());
+            transactions = transactions.stream().filter(t -> t.getTimestamp().isAfter(startDate))
+                    .collect(Collectors.toList());
         }
         if (endDate != null) {
-            transactions = transactions.stream().filter(t -> t.getTimestamp().isBefore(endDate)).collect(Collectors.toList());
+            transactions = transactions.stream().filter(t -> t.getTimestamp().isBefore(endDate))
+                    .collect(Collectors.toList());
         }
         if (minAmount != null) {
-            transactions = transactions.stream().filter(t -> t.getAmount().compareTo(minAmount) >= 0).collect(Collectors.toList());
+            transactions = transactions.stream().filter(t -> t.getAmount().compareTo(minAmount) >= 0)
+                    .collect(Collectors.toList());
         }
         if (maxAmount != null) {
-            transactions = transactions.stream().filter(t -> t.getAmount().compareTo(maxAmount) <= 0).collect(Collectors.toList());
+            transactions = transactions.stream().filter(t -> t.getAmount().compareTo(maxAmount) <= 0)
+                    .collect(Collectors.toList());
         }
         return transactions;
     }
 
     @Transactional(readOnly = true)
-    public Page<Transaction> filterTransactionsPaged(Long userId, String type, LocalDateTime startDate, LocalDateTime endDate, String status, BigDecimal minAmount, BigDecimal maxAmount, Pageable pageable) {
+    public Page<Transaction> filterTransactionsPaged(Long userId, String type, LocalDateTime startDate,
+            LocalDateTime endDate, String status, BigDecimal minAmount, BigDecimal maxAmount, Pageable pageable) {
         List<Transaction> filtered = filterTransactions(userId, type, startDate, endDate, status, minAmount, maxAmount);
 
         int start = (int) pageable.getOffset();
@@ -587,12 +598,15 @@ public class WalletService {
     public List<Transaction> searchTransactions(Long userId, String keyword) {
         List<Transaction> allTransactions = getTransactionHistory(userId);
         return allTransactions.stream()
-                .filter(t ->
-                        (t.getTransactionRef() != null && t.getTransactionRef().contains(keyword)) ||
-                                (t.getSender() != null && t.getSender().getFullName() != null && t.getSender().getFullName().toLowerCase().contains(keyword.toLowerCase())) ||
-                                (t.getReceiver() != null && t.getReceiver().getFullName() != null && t.getReceiver().getFullName().toLowerCase().contains(keyword.toLowerCase())) ||
-                                (t.getDescription() != null && t.getDescription().toLowerCase().contains(keyword.toLowerCase()))
-                )
+                .filter(t -> (t.getTransactionRef() != null && t.getTransactionRef().contains(keyword)) ||
+                        (t.getSender() != null && t.getSender().getFullName() != null
+                                && t.getSender().getFullName().toLowerCase().contains(keyword.toLowerCase()))
+                        ||
+                        (t.getReceiver() != null && t.getReceiver().getFullName() != null
+                                && t.getReceiver().getFullName().toLowerCase().contains(keyword.toLowerCase()))
+                        ||
+                        (t.getDescription() != null
+                                && t.getDescription().toLowerCase().contains(keyword.toLowerCase())))
                 .collect(Collectors.toList());
     }
 
@@ -702,15 +716,15 @@ public class WalletService {
         Map<String, BigDecimal> categories = outgoing.stream()
                 .collect(Collectors.groupingBy(
                         t -> t.getType().name(),
-                        Collectors.mapping(Transaction::getAmount, Collectors.reducing(BigDecimal.ZERO, BigDecimal::add))
-                ));
+                        Collectors.mapping(Transaction::getAmount,
+                                Collectors.reducing(BigDecimal.ZERO, BigDecimal::add))));
 
         BigDecimal currentBalance = walletRepository.findByUser(user)
                 .map(Wallet::getBalance)
                 .orElse(BigDecimal.ZERO);
 
-        BigDecimal averageTransactionValue = outgoing.isEmpty() ? BigDecimal.ZERO :
-                totalSpent.divide(BigDecimal.valueOf(outgoing.size()), 2, java.math.RoundingMode.HALF_UP);
+        BigDecimal averageTransactionValue = outgoing.isEmpty() ? BigDecimal.ZERO
+                : totalSpent.divide(BigDecimal.valueOf(outgoing.size()), 2, java.math.RoundingMode.HALF_UP);
 
         return WalletAnalyticsDTO.builder()
                 .currentBalance(currentBalance)
@@ -725,20 +739,45 @@ public class WalletService {
 
     // --- 9. LOAN WALLET INTEGRATIONS ---
 
-    @Retryable(
-            retryFor = {CannotAcquireLockException.class, PessimisticLockingFailureException.class, DeadlockLoserDataAccessException.class},
-            maxAttempts = 3,
-            backoff = @Backoff(delay = 100, multiplier = 2.0)
-    )
+    @Retryable(retryFor = { CannotAcquireLockException.class, PessimisticLockingFailureException.class,
+            DeadlockLoserDataAccessException.class }, maxAttempts = 3, backoff = @Backoff(delay = 100, multiplier = 2.0))
     @Transactional
-    public Transaction addFundsForLoan(Long userId, BigDecimal amount, String description) {
-        Wallet wallet = walletRepository.findByUserUserIdForUpdate(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("Wallet not found"));
-        wallet.setBalance(wallet.getBalance().add(amount));
-        walletRepository.save(wallet);
+    public Transaction disburseLoanFromAdmin(Long adminId, Long recipientId, BigDecimal amount, String description) {
+        User admin = userRepository.findById(adminId)
+                .orElseThrow(() -> new ResourceNotFoundException("Admin not found"));
+        User recipient = userRepository.findById(recipientId)
+                .orElseThrow(() -> new ResourceNotFoundException("Recipient not found"));
+
+        Wallet adminWallet;
+        Wallet recipientWallet;
+
+        if (adminId < recipientId) {
+            adminWallet = walletRepository.findByUserUserIdForUpdate(adminId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Admin wallet not found"));
+            recipientWallet = walletRepository.findByUserUserIdForUpdate(recipientId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Recipient wallet not found"));
+        } else {
+            recipientWallet = walletRepository.findByUserUserIdForUpdate(recipientId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Recipient wallet not found"));
+            adminWallet = walletRepository.findByUserUserIdForUpdate(adminId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Admin wallet not found"));
+        }
+
+        if (adminWallet.getBalance().compareTo(amount) < 0) {
+            throw new InsufficientBalanceException("Admin wallet has insufficient balance for loan disbursement");
+        }
+
+        adminWallet.setBalance(adminWallet.getBalance().subtract(amount));
+        recipientWallet.setBalance(recipientWallet.getBalance().add(amount));
+
+        walletRepository.save(adminWallet);
+        walletRepository.save(recipientWallet);
+
+        checkAndAlertLowBalance(adminWallet);
 
         Transaction tx = new Transaction();
-        tx.setReceiver(wallet.getUser());
+        tx.setSender(admin);
+        tx.setReceiver(recipient);
         tx.setAmount(amount);
         tx.setType(Transaction.TransactionType.LOAN_DISBURSEMENT);
         tx.setStatus(Transaction.TransactionStatus.COMPLETED);
@@ -748,11 +787,8 @@ public class WalletService {
         return transactionRepository.save(tx);
     }
 
-    @Retryable(
-            retryFor = {CannotAcquireLockException.class, PessimisticLockingFailureException.class, DeadlockLoserDataAccessException.class},
-            maxAttempts = 3,
-            backoff = @Backoff(delay = 100, multiplier = 2.0)
-    )
+    @Retryable(retryFor = { CannotAcquireLockException.class, PessimisticLockingFailureException.class,
+            DeadlockLoserDataAccessException.class }, maxAttempts = 3, backoff = @Backoff(delay = 100, multiplier = 2.0))
     @Transactional
     public Transaction withdrawFundsForLoan(Long userId, BigDecimal amount, String description) {
         Wallet wallet = walletRepository.findByUserUserIdForUpdate(userId)

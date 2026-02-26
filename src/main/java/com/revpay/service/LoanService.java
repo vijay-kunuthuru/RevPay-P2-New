@@ -30,12 +30,11 @@ public class LoanService {
     private final LoanInstallmentRepository installmentRepository;
     private final NotificationService notificationService;
 
-    private static final BigDecimal PRE_CLOSURE_RATE   = new BigDecimal("0.02");
+    private static final BigDecimal PRE_CLOSURE_RATE = new BigDecimal("0.02");
     private static final BigDecimal MEDIUM_RISK_FACTOR = new BigDecimal("0.7");
-    private static final BigDecimal HIGH_RISK_FACTOR   = new BigDecimal("0.4");
-    private static final BigDecimal OVERDUE_PENALTY    = new BigDecimal("100");
-    private static final BigDecimal MIN_INTEREST_RATE  = new BigDecimal("1");
-
+    private static final BigDecimal HIGH_RISK_FACTOR = new BigDecimal("0.4");
+    private static final BigDecimal OVERDUE_PENALTY = new BigDecimal("100");
+    private static final BigDecimal MIN_INTEREST_RATE = new BigDecimal("1");
 
     @Transactional
     public LoanResponseDTO applyLoan(Long userId, LoanApplyDTO dto) {
@@ -68,8 +67,7 @@ public class LoanService {
         notificationService.createNotification(
                 user.getUserId(),
                 NotificationUtil.loanApplied(dto.getAmount()),
-                "LOAN"
-        );
+                "LOAN");
 
         return LoanResponseDTO.builder()
                 .loanId(loan.getLoanId())
@@ -80,9 +78,8 @@ public class LoanService {
                 .build();
     }
 
-
     @Transactional
-    public String approveLoan(LoanApprovalDTO dto) {
+    public String approveLoan(Long adminId, LoanApprovalDTO dto) {
         log.info("Loan approval process started for loanId: {}", dto.getLoanId());
 
         Loan loan = loanRepository.findById(dto.getLoanId())
@@ -115,11 +112,11 @@ public class LoanService {
 
             log.info("EMI calculated for loanId {}: {}", dto.getLoanId(), emi);
 
-            walletService.addFundsForLoan(
+            walletService.disburseLoanFromAdmin(
+                    adminId,
                     loan.getUser().getUserId(),
                     loan.getAmount(),
-                    "Loan Disbursement #" + loan.getLoanId()
-            );
+                    "Loan Disbursement #" + loan.getLoanId());
             log.info("Loan amount disbursed to wallet for userId: {}", loan.getUser().getUserId());
 
             generateInstallments(loan);
@@ -128,8 +125,7 @@ public class LoanService {
             notificationService.createNotification(
                     loan.getUser().getUserId(),
                     NotificationUtil.loanApproved(),
-                    "LOAN"
-            );
+                    "LOAN");
 
         } else {
             log.warn("Loan rejected for loanId: {}", dto.getLoanId());
@@ -138,8 +134,7 @@ public class LoanService {
             notificationService.createNotification(
                     loan.getUser().getUserId(),
                     NotificationUtil.loanRejected(),
-                    "LOAN"
-            );
+                    "LOAN");
         }
 
         loanRepository.save(loan);
@@ -198,12 +193,12 @@ public class LoanService {
                     return new IllegalArgumentException("No pending EMI");
                 });
 
-        BigDecimal emiAmount     = nextInstallment.getAmount();
+        BigDecimal emiAmount = nextInstallment.getAmount();
         BigDecimal payableAmount = emiAmount;
-        BigDecimal penalty       = BigDecimal.ZERO;
+        BigDecimal penalty = BigDecimal.ZERO;
 
         if (nextInstallment.getStatus() == InstallmentStatus.OVERDUE) {
-            penalty       = OVERDUE_PENALTY;
+            penalty = OVERDUE_PENALTY;
             payableAmount = emiAmount.add(penalty);
             log.warn("Overdue EMI detected. Penalty of ₹100 applied for loanId: {}", loan.getLoanId());
         }
@@ -211,8 +206,7 @@ public class LoanService {
         walletService.withdrawFundsForLoan(
                 userId,
                 payableAmount,
-                "Loan Repayment #" + loan.getLoanId()
-        );
+                "Loan Repayment #" + loan.getLoanId());
         log.info("Amount {} deducted from wallet for userId: {}", payableAmount, userId);
 
         nextInstallment.setStatus(InstallmentStatus.PAID);
@@ -233,8 +227,7 @@ public class LoanService {
         notificationService.createNotification(
                 loan.getUser().getUserId(),
                 NotificationUtil.loanRepayment(payableAmount),
-                "LOAN"
-        );
+                "LOAN");
         log.info("Repayment notification sent for loanId: {}", loan.getLoanId());
 
         return "EMI Paid Successfully";
@@ -262,7 +255,7 @@ public class LoanService {
         BigDecimal remaining = loan.getRemainingAmount();
 
         BigDecimal preClosureCharge = remaining.multiply(PRE_CLOSURE_RATE);
-        BigDecimal totalPayable     = remaining.add(preClosureCharge);
+        BigDecimal totalPayable = remaining.add(preClosureCharge);
 
         log.debug("Remaining: {}, Pre-closure charge: {}, Total payable: {}",
                 remaining, preClosureCharge, totalPayable);
@@ -270,8 +263,7 @@ public class LoanService {
         walletService.withdrawFundsForLoan(
                 userId,
                 totalPayable,
-                "Loan Pre-Closure #" + loanId
-        );
+                "Loan Pre-Closure #" + loanId);
         log.info("Amount {} deducted for loan pre-closure for userId: {}", totalPayable, userId);
 
         loan.setRemainingAmount(BigDecimal.ZERO);
@@ -282,13 +274,11 @@ public class LoanService {
         notificationService.createNotification(
                 loan.getUser().getUserId(),
                 "Your loan has been pre-closed successfully.",
-                "LOAN"
-        );
+                "LOAN");
         log.info("Pre-closure notification sent to userId: {}", loan.getUser().getUserId());
 
         return "Loan Pre-closed successfully";
     }
-
 
     @Transactional(readOnly = true)
     public List<Loan> getUserLoans(Long userId) {
@@ -383,8 +373,10 @@ public class LoanService {
     @Transactional(readOnly = true)
     public Page<LoanInstallment> getOverdueEmisPaged(Long userId, Pageable pageable) {
         log.info("Fetching paginated overdue EMIs for userId: {}", userId);
-        // Note: For pagination, querying strictly on status OVERDUE or filtering via query is required.
-        // If a hybrid logic is needed, the repository query must reflect `status = OVERDUE OR (status = PENDING AND dueDate < CURRENT_DATE)`
+        // Note: For pagination, querying strictly on status OVERDUE or filtering via
+        // query is required.
+        // If a hybrid logic is needed, the repository query must reflect `status =
+        // OVERDUE OR (status = PENDING AND dueDate < CURRENT_DATE)`
         return installmentRepository.findOverdueByUserId(userId, LocalDate.now(), pageable);
     }
 
@@ -416,13 +408,11 @@ public class LoanService {
         return total;
     }
 
-
     @Transactional
     public void markOverdueInstallments() {
         log.info("Starting overdue EMI check process");
 
-        List<LoanInstallment> pendingInstallments =
-                installmentRepository.findAllByStatus(InstallmentStatus.PENDING);
+        List<LoanInstallment> pendingInstallments = installmentRepository.findAllByStatus(InstallmentStatus.PENDING);
 
         log.debug("Total PENDING installments fetched: {}", pendingInstallments.size());
 
@@ -438,13 +428,10 @@ public class LoanService {
 
         installmentRepository.saveAll(nowOverdue);
 
-        nowOverdue.forEach(emi ->
-                notificationService.createNotification(
-                        emi.getLoan().getUser().getUserId(),
-                        "Your EMI is overdue. Please pay immediately.",
-                        "LOAN"
-                )
-        );
+        nowOverdue.forEach(emi -> notificationService.createNotification(
+                emi.getLoan().getUser().getUserId(),
+                "Your EMI is overdue. Please pay immediately.",
+                "LOAN"));
 
         log.info("Overdue EMI check completed. {} installments marked overdue.", nowOverdue.size());
     }
@@ -453,12 +440,12 @@ public class LoanService {
     public int calculateCreditScore(Long userId) {
         log.info("Calculating credit score for userId: {}", userId);
 
-        long paid    = installmentRepository.findByUserIdAndStatus(userId, InstallmentStatus.PAID).size();
+        long paid = installmentRepository.findByUserIdAndStatus(userId, InstallmentStatus.PAID).size();
         long overdue = installmentRepository.findByUserIdAndStatus(userId, InstallmentStatus.OVERDUE).size();
 
         log.debug("Paid installments: {}, Overdue installments: {}", paid, overdue);
 
-        int score = 700 + (int)(paid * 2) - (int)(overdue * 5);
+        int score = 700 + (int) (paid * 2) - (int) (overdue * 5);
         score = Math.max(300, Math.min(850, score));
 
         log.info("Final credit score for userId {}: {}", userId, score);
@@ -471,7 +458,7 @@ public class LoanService {
         int score = calculateCreditScore(userId);
         RiskTier tier = (score >= 750) ? RiskTier.LOW
                 : (score >= 650) ? RiskTier.MEDIUM
-                :                  RiskTier.HIGH;
+                        : RiskTier.HIGH;
         log.debug("Risk tier for userId {} with score {}: {}", userId, score, tier);
         return tier;
     }
@@ -482,8 +469,8 @@ public class LoanService {
         int score = calculateCreditScore(userId);
         BigDecimal limit = (score >= 750) ? BigDecimal.valueOf(1_000_000)
                 : (score >= 700) ? BigDecimal.valueOf(500_000)
-                : (score >= 650) ? BigDecimal.valueOf(200_000)
-                :                  BigDecimal.valueOf(50_000);
+                        : (score >= 650) ? BigDecimal.valueOf(200_000)
+                                : BigDecimal.valueOf(50_000);
         log.debug("Loan limit for userId {} with score {}: {}", userId, score, limit);
         return limit;
     }
@@ -506,8 +493,8 @@ public class LoanService {
     @Transactional(readOnly = true)
     public LoanEligibilityDTO checkEligibility(Long userId) {
         log.info("Fetching loan eligibility details for userId: {}", userId);
-        int score        = calculateCreditScore(userId);
-        RiskTier risk    = getRiskTier(userId);
+        int score = calculateCreditScore(userId);
+        RiskTier risk = getRiskTier(userId);
         BigDecimal limit = getLoanLimit(userId);
         boolean eligible = (risk != RiskTier.HIGH);
         log.debug("Eligibility result -> Score: {}, Risk: {}, Limit: {}, Eligible: {}",
@@ -526,7 +513,7 @@ public class LoanService {
         int score = calculateCreditScore(userId);
         VipTier tier = (score >= 780) ? VipTier.PLATINUM
                 : (score >= 720) ? VipTier.GOLD
-                :                  VipTier.NONE;
+                        : VipTier.NONE;
         log.debug("VIP tier for userId {} with score {}: {}", userId, score, tier);
         return tier;
     }
@@ -536,8 +523,8 @@ public class LoanService {
         int score = calculateCreditScore(userId);
         BigDecimal interest = (score >= 750) ? BigDecimal.valueOf(8)
                 : (score >= 700) ? BigDecimal.valueOf(10)
-                : (score >= 650) ? BigDecimal.valueOf(12)
-                :                  BigDecimal.valueOf(15);
+                        : (score >= 650) ? BigDecimal.valueOf(12)
+                                : BigDecimal.valueOf(15);
         log.debug("Base interest based on score {}: {}", score, interest);
         BigDecimal finalInterest = applyVipDiscount(userId, interest);
         log.info("Final interest after VIP adjustment for userId {}: {}", userId, finalInterest);
@@ -549,11 +536,12 @@ public class LoanService {
         VipTier vip = getVipTier(userId);
         BigDecimal finalInterest = switch (vip) {
             case PLATINUM -> baseInterest.subtract(BigDecimal.valueOf(2));
-            case GOLD     -> baseInterest.subtract(BigDecimal.valueOf(1));
-            default       -> baseInterest;
+            case GOLD -> baseInterest.subtract(BigDecimal.valueOf(1));
+            default -> baseInterest;
         };
 
-        if (finalInterest.compareTo(MIN_INTEREST_RATE) < 0) finalInterest = MIN_INTEREST_RATE;
+        if (finalInterest.compareTo(MIN_INTEREST_RATE) < 0)
+            finalInterest = MIN_INTEREST_RATE;
         log.debug("VIP tier: {}, Base interest: {}, Final interest: {}", vip, baseInterest, finalInterest);
         return finalInterest;
     }
@@ -562,18 +550,18 @@ public class LoanService {
     public LoanRecommendationDTO getLoanRecommendation(Long userId) {
         log.info("Generating loan recommendation for userId: {}", userId);
 
-        int score           = calculateCreditScore(userId);
-        RiskTier risk       = getRiskTier(userId);
-        VipTier vip         = getVipTier(userId);
-        BigDecimal limit    = getLoanLimit(userId);
+        int score = calculateCreditScore(userId);
+        RiskTier risk = getRiskTier(userId);
+        VipTier vip = getVipTier(userId);
+        BigDecimal limit = getLoanLimit(userId);
         BigDecimal interest = getDynamicInterest(userId);
 
         // FIXED: Added default case to ensure the switch expression is exhaustive
         BigDecimal recommended = switch (risk) {
-            case LOW    -> limit;
+            case LOW -> limit;
             case MEDIUM -> limit.multiply(MEDIUM_RISK_FACTOR);
-            case HIGH   -> limit.multiply(HIGH_RISK_FACTOR);
-            default     -> limit.multiply(HIGH_RISK_FACTOR); // Fallback for safety
+            case HIGH -> limit.multiply(HIGH_RISK_FACTOR);
+            default -> limit.multiply(HIGH_RISK_FACTOR); // Fallback for safety
         };
 
         log.debug("Recommendation -> Score: {}, Risk: {}, VIP: {}, Limit: {}, Recommended: {}, Interest: {}",

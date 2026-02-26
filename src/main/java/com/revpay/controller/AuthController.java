@@ -103,4 +103,17 @@ public class AuthController {
         log.info("Password updated successfully for userId: {}", currentUserId);
         return ResponseEntity.ok(ApiResponse.success(null, "Password updated successfully"));
     }
+
+    @PutMapping("/update-pin")
+    @Operation(summary = "Update transaction PIN", description = "Updates the transaction PIN for the currently authenticated user. Requires the current PIN for verification.")
+    public ResponseEntity<ApiResponse<String>> updatePin(
+            @Valid @RequestBody com.revpay.model.dto.UpdatePinRequest request) {
+        Long currentUserId = getAuthenticatedUserId();
+        log.info("Transaction PIN update initiated by userId: {}", currentUserId);
+
+        authService.updateTransactionPin(currentUserId, request);
+
+        log.info("Transaction PIN updated successfully for userId: {}", currentUserId);
+        return ResponseEntity.ok(ApiResponse.success(null, "Transaction PIN updated successfully"));
+    }
 }

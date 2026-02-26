@@ -53,4 +53,10 @@ public class SignupRequest {
     @NotBlank(message = "Security answer is required")
     @ToString.Exclude // Prevent security answer logging
     private String securityAnswer;
+
+    // --- Business Specific Fields (Optional for Personal Users) ---
+    private String businessName;
+    private String businessType;
+    private String taxId;
+    private String address;
 }

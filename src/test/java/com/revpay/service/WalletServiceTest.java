@@ -26,13 +26,20 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 public class WalletServiceTest {
 
-    @Mock private WalletRepository walletRepo;
-    @Mock private TransactionRepository transRepo;
-    @Mock private UserRepository userRepo;
-    @Mock private PasswordEncoder encoder;
-    @Mock private NotificationService notificationService;
-    @Mock private PaymentMethodRepository paymentMethodRepo;
-    @Mock private ApplicationEventPublisher eventPublisher;
+    @Mock
+    private WalletRepository walletRepo;
+    @Mock
+    private TransactionRepository transRepo;
+    @Mock
+    private UserRepository userRepo;
+    @Mock
+    private PasswordEncoder encoder;
+    @Mock
+    private NotificationService notificationService;
+    @Mock
+    private PaymentMethodRepository paymentMethodRepo;
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
     private WalletService walletService;
@@ -90,7 +97,8 @@ public class WalletServiceTest {
         when(walletRepo.findByUserUserIdForUpdate(sender.getUserId())).thenReturn(Optional.of(senderWallet));
         when(walletRepo.findByUserUserIdForUpdate(receiver.getUserId())).thenReturn(Optional.of(receiverWallet));
 
-        lenient().when(transRepo.findBySenderOrReceiverOrderByTimestampDesc(any(), any())).thenReturn(new ArrayList<>());
+        lenient().when(transRepo.findBySenderOrReceiverOrderByTimestampDesc(any(), any()))
+                .thenReturn(new ArrayList<>());
         when(transRepo.save(any(Transaction.class))).thenAnswer(invocation -> invocation.getArguments()[0]);
 
         Transaction result = walletService.sendMoney(1L, req);
@@ -136,8 +144,10 @@ public class WalletServiceTest {
         lenient().when(encoder.matches("1234", sender.getTransactionPinHash())).thenReturn(true);
 
         lenient().when(walletRepo.findByUserUserIdForUpdate(sender.getUserId())).thenReturn(Optional.of(senderWallet));
-        lenient().when(walletRepo.findByUserUserIdForUpdate(receiver.getUserId())).thenReturn(Optional.of(receiverWallet));
-        lenient().when(transRepo.findBySenderOrReceiverOrderByTimestampDesc(any(), any())).thenReturn(new ArrayList<>());
+        lenient().when(walletRepo.findByUserUserIdForUpdate(receiver.getUserId()))
+                .thenReturn(Optional.of(receiverWallet));
+        lenient().when(transRepo.findBySenderOrReceiverOrderByTimestampDesc(any(), any()))
+                .thenReturn(new ArrayList<>());
 
         assertThrows(InsufficientBalanceException.class, () -> walletService.sendMoney(1L, req));
     }
@@ -155,7 +165,8 @@ public class WalletServiceTest {
         lenient().when(userRepo.findById(1L)).thenReturn(Optional.of(sender));
         lenient().when(userRepo.findByEmail("receiver@revpay.com")).thenReturn(Optional.of(receiver));
         lenient().when(encoder.matches("1234", sender.getTransactionPinHash())).thenReturn(true);
-        lenient().when(transRepo.findBySenderOrReceiverOrderByTimestampDesc(any(), any())).thenReturn(new ArrayList<>());
+        lenient().when(transRepo.findBySenderOrReceiverOrderByTimestampDesc(any(), any()))
+                .thenReturn(new ArrayList<>());
 
         // FIXED: Expecting IllegalStateException as implemented in WalletService
         assertThrows(IllegalStateException.class, () -> walletService.sendMoney(1L, req));
@@ -169,7 +180,7 @@ public class WalletServiceTest {
         when(walletRepo.findByUserUserIdForUpdate(1L)).thenReturn(Optional.of(senderWallet));
         when(transRepo.save(any(Transaction.class))).thenAnswer(invocation -> invocation.getArguments()[0]);
 
-        Transaction result = walletService.addFunds(1L, new BigDecimal("500.00"), "Credit Card");
+        Transaction result = walletService.addFunds(1L, new BigDecimal("500.00"), 1L, "Credit Card");
 
         assertEquals(new BigDecimal("5500.00"), senderWallet.getBalance());
         assertNotNull(result);
@@ -202,7 +213,8 @@ public class WalletServiceTest {
     @Test
     void testGetBalance_ReturnsCorrectAmount() {
         lenient().when(userRepo.findById(1L)).thenReturn(Optional.of(sender));
-        // FIXED: Updated mock to match the new findByUser call in WalletService.getBalance
+        // FIXED: Updated mock to match the new findByUser call in
+        // WalletService.getBalance
         when(walletRepo.findByUser(sender)).thenReturn(Optional.of(senderWallet));
 
         BigDecimal balance = walletService.getBalance(1L);
@@ -242,9 +254,11 @@ public class WalletServiceTest {
         lenient().when(userRepo.findById(receiver.getUserId())).thenReturn(Optional.of(receiver));
         lenient().when(userRepo.findByEmail(sender.getEmail())).thenReturn(Optional.of(sender));
         lenient().when(encoder.matches("1234", receiver.getTransactionPinHash())).thenReturn(true);
-        lenient().when(walletRepo.findByUserUserIdForUpdate(receiver.getUserId())).thenReturn(Optional.of(receiverWallet));
+        lenient().when(walletRepo.findByUserUserIdForUpdate(receiver.getUserId()))
+                .thenReturn(Optional.of(receiverWallet));
         lenient().when(walletRepo.findByUserUserIdForUpdate(sender.getUserId())).thenReturn(Optional.of(senderWallet));
-        lenient().when(transRepo.findBySenderOrReceiverOrderByTimestampDesc(any(), any())).thenReturn(new ArrayList<>());
+        lenient().when(transRepo.findBySenderOrReceiverOrderByTimestampDesc(any(), any()))
+                .thenReturn(new ArrayList<>());
         lenient().when(transRepo.save(any(Transaction.class))).thenAnswer(invocation -> invocation.getArguments()[0]);
 
         Transaction result = walletService.acceptRequest(100L, "1234");

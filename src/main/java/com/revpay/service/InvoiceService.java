@@ -63,7 +63,8 @@ public class InvoiceService {
 
         if (!business.isVerified()) {
             log.warn("FRAUD_PREVENTION | Unverified business attempted to create invoice. Email: {}", userEmail);
-            throw new UnauthorizedException("Your business account is pending admin verification. You cannot issue invoices yet.");
+            throw new UnauthorizedException(
+                    "Your business account is pending admin verification. You cannot issue invoices yet.");
         }
 
         invoice.setBusinessProfile(business);
@@ -114,15 +115,23 @@ public class InvoiceService {
 
         userRepository.findByEmail(invoice.getCustomerEmail()).ifPresentOrElse(
                 customer -> {
+                    com.revpay.model.entity.Transaction reqTx = walletService.requestMoney(
+                            invoice.getBusinessProfile().getUser().getUserId(),
+                            customer.getEmail(),
+                            invoice.getTotalAmount());
+                    invoice.setLinkedTransactionId(reqTx.getTransactionId());
+                    invoiceRepository.save(invoice);
+
                     notificationService.createNotification(
                             customer.getUserId(),
-                            "You have a new invoice of ₹" + invoice.getTotalAmount() + " from " + invoice.getCustomerName(), // MESSAGE GOES SECOND
+                            "You have a new invoice of ₹" + invoice.getTotalAmount() + " from "
+                                    + invoice.getCustomerName(), // MESSAGE GOES SECOND
                             "INVOICE" // TYPE GOES THIRD
                     );
                     log.info("INVOICE_NOTIFICATION | Sent alert to User ID: {}", customer.getUserId());
                 },
-                () -> log.warn("INVOICE_SENT | Customer email {} not registered in RevPay yet.", invoice.getCustomerEmail())
-        );
+                () -> log.warn("INVOICE_SENT | Customer email {} not registered in RevPay yet.",
+                        invoice.getCustomerEmail()));
 
         log.info("INVOICE_SENT | Invoice {} status updated to SENT", invoiceId);
     }
@@ -147,7 +156,8 @@ public class InvoiceService {
                 .orElseThrow(() -> new ResourceNotFoundException("Customer user not found"));
 
         if (!customer.getEmail().equalsIgnoreCase(invoice.getCustomerEmail())) {
-            log.warn("FRAUD_PREVENTION | User {} attempted to pay invoice belonging to {}", customer.getEmail(), invoice.getCustomerEmail());
+            log.warn("FRAUD_PREVENTION | User {} attempted to pay invoice belonging to {}", customer.getEmail(),
+                    invoice.getCustomerEmail());
             throw new UnauthorizedException("You are not authorized to pay this invoice.");
         }
 
@@ -225,7 +235,8 @@ public class InvoiceService {
         Long ownerUserId = profile.getUser().getUserId();
 
         if (!loggedInUserId.equals(ownerUserId)) {
-            log.warn("UNAUTHORIZED_ACCESS | User {} attempted to access Business Profile {}", loggedInUserId, profileId);
+            log.warn("UNAUTHORIZED_ACCESS | User {} attempted to access Business Profile {}", loggedInUserId,
+                    profileId);
             throw new UnauthorizedException("Access denied. You do not own this business profile.");
         }
 

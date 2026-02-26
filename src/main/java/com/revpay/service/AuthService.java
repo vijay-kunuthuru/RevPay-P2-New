@@ -66,7 +66,17 @@ public class AuthService {
         initializeUserWallet(savedUser);
 
         if (savedUser.getRole() == Role.BUSINESS) {
-            initializeBusinessProfile(savedUser, request.getFullName());
+            // Additional validation for business fields
+            if (request.getBusinessName() == null || request.getBusinessName().isBlank()) {
+                throw new IllegalArgumentException("Business name is required for business accounts.");
+            }
+            if (request.getTaxId() == null || request.getTaxId().isBlank()) {
+                throw new IllegalArgumentException("Tax ID is required for business accounts.");
+            }
+            if (request.getAddress() == null || request.getAddress().isBlank()) {
+                throw new IllegalArgumentException("Address is required for business accounts.");
+            }
+            initializeBusinessProfile(savedUser, request);
         }
 
         log.info("REGISTRATION_SUCCESS | Created UserID: {} with Role: {}", savedUser.getUserId(), savedUser.getRole());
@@ -115,6 +125,24 @@ public class AuthService {
         log.info("PASSWORD_UPDATE_SUCCESS | UserID: {} successfully updated their password.", userId);
     }
 
+    @Transactional
+    public void updateTransactionPin(Long userId, com.revpay.model.dto.UpdatePinRequest request) {
+        log.info("PIN_UPDATE_ATTEMPT | Processing for UserID: {}", userId);
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User session is invalid."));
+
+        // Verify old PIN
+        if (!passwordEncoder.matches(request.getOldPin(), user.getTransactionPinHash())) {
+            log.warn("PIN_UPDATE_FAILED | Current PIN mismatch for UserID: {}", userId);
+            throw new UnauthorizedException("The current PIN provided is incorrect.");
+        }
+
+        user.setTransactionPinHash(passwordEncoder.encode(request.getNewPin()));
+        userRepository.save(user);
+        log.info("PIN_UPDATE_SUCCESS | UserID: {} successfully updated their transaction PIN.", userId);
+    }
+
     // --- Private Helper Methods to keep code DRY and Readable ---
 
     private void assignRole(User user, String roleStr) {
@@ -139,10 +167,13 @@ public class AuthService {
         log.debug("WALLET_INITIALIZED | Linked to UserID: {}", user.getUserId());
     }
 
-    private void initializeBusinessProfile(User user, String name) {
+    private void initializeBusinessProfile(User user, SignupRequest request) {
         BusinessProfile profile = new BusinessProfile();
         profile.setUser(user);
-        profile.setBusinessName(name + " Business");
+        profile.setBusinessName(request.getBusinessName());
+        profile.setBusinessType(request.getBusinessType());
+        profile.setTaxId(request.getTaxId());
+        profile.setAddress(request.getAddress());
         // Business profiles usually start as unverified
         businessRepository.save(profile);
         log.debug("BUSINESS_PROFILE_CREATED | Linked to UserID: {}", user.getUserId());

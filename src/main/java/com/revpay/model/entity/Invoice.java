@@ -65,6 +65,9 @@ public class Invoice {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
+    @Column(name = "linked_transaction_id")
+    private Long linkedTransactionId;
+
     public enum InvoiceStatus {
         DRAFT, SENT, PAID, OVERDUE, CANCELLED
     }
@@ -78,8 +81,10 @@ public class Invoice {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (this == o)
+            return true;
+        if (o == null || getClass() != o.getClass())
+            return false;
         Invoice invoice = (Invoice) o;
         return Objects.equals(id, invoice.id);
     }

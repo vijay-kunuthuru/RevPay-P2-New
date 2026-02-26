@@ -33,9 +33,6 @@ public class LoanApplyDTO {
     @Size(max = 255, message = "Purpose must not exceed 255 characters")
     private String purpose;
 
-    @Size(max = 255, message = "Document name must not exceed 255 characters")
-    private String documentName;
-
     /**
      * Categorizes the loan for risk assessment (e.g., WORKING_CAPITAL, EXPANSION).
      */

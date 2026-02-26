@@ -113,7 +113,6 @@ public class WalletController {
     // --- 2. BILL PAY & MONEY REQUESTS ---
 
     @PostMapping("/pay-invoice")
-    @Operation(summary = "Mark invoice as paid", description = "Manually updates the status of an invoice to PAID (For Cash/Offline payments).")
     public ResponseEntity<ApiResponse<TransactionDTO>> payInvoice(@Valid @RequestBody InvoicePaymentRequest req, Authentication auth) {
         Transaction t = walletService.payInvoice(getAuthenticatedUser(auth).getUserId(), req.getInvoiceId(), req.getTransactionPin());
         return ResponseEntity.ok(ApiResponse.success(mapTx(t), "Invoice paid"));
@@ -156,10 +155,8 @@ public class WalletController {
     // --- 3. SEARCH & ADVANCED FILTERING ---
 
     @GetMapping("/transactions")
-    @Operation(summary = "Get transaction history", description = "Retrieves a paginated ledger of all incoming and outgoing transactions for the authenticated user.")
     public ResponseEntity<ApiResponse<Page<TransactionDTO>>> getHistory(@RequestParam(required = false) String type, @PageableDefault(size = 20) Pageable p, Authentication auth) {
         User user = getAuthenticatedUser(auth);
-        log.debug("Fetching transaction history for User ID: {}. Type filter: {}", user.getUserId(), type);
         Page<Transaction> res = (type != null && !type.isEmpty()) ? walletService.getMyHistoryPaged(user, type, p) : walletService.getTransactionHistoryPaged(user.getUserId(), p);
         return ResponseEntity.ok(ApiResponse.success(res.map(this::mapTx), "History retrieved"));
     }
@@ -213,13 +210,11 @@ public class WalletController {
     // --- 5. SAVED PAYMENT METHODS ---
 
     @GetMapping("/cards")
-    @Operation(summary = "Get my saved cards", description = "Retrieves a paginated list of all masked payment methods linked to the user.")
     public ResponseEntity<ApiResponse<Page<PaymentMethodDTO>>> getCards(@PageableDefault(size = 10) Pageable p, Authentication auth) {
         return ResponseEntity.ok(ApiResponse.success(walletService.getCardsPaged(getAuthenticatedUser(auth).getUserId(), p).map(this::mapCard), "Saved cards retrieved"));
     }
 
     @PostMapping("/cards")
-    @Operation(summary = "Add a new card", description = "Links a new credit or debit card to the authenticated user's digital wallet.")
     public ResponseEntity<ApiResponse<PaymentMethodDTO>> addCard(@Valid @RequestBody CardPayload payload, Authentication auth) {
         // Map DTO to Entity manually to prevent mass assignment
         PaymentMethod card = new PaymentMethod();
@@ -249,14 +244,12 @@ public class WalletController {
     }
 
     @DeleteMapping("/cards/{cardId}")
-    @Operation(summary = "Delete a saved card", description = "Removes a specific payment method from the user's digital wallet.")
     public ResponseEntity<ApiResponse<String>> deleteCard(@PathVariable Long cardId, Authentication auth) {
         walletService.deleteCard(getAuthenticatedUser(auth).getUserId(), cardId);
         return ResponseEntity.ok(ApiResponse.success(null, "Card unlinked successfully"));
     }
 
     @PostMapping("/cards/default/{cardId}")
-    @Operation(summary = "Set default card", description = "Updates a specific card to be the primary payment method for transactions.")
     public ResponseEntity<ApiResponse<String>> setDefault(@PathVariable Long cardId, Authentication auth) {
         walletService.setDefaultCard(getAuthenticatedUser(auth).getUserId(), cardId);
         return ResponseEntity.ok(ApiResponse.success(null, "Primary payment method updated"));

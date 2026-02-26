@@ -9,6 +9,4 @@ import java.util.Optional;
 @Repository
 public interface BusinessProfileRepository extends JpaRepository<BusinessProfile, Long> {
     Optional<BusinessProfile> findByUserEmail(String email);
-
-    Optional<BusinessProfile> findByUser_UserId(Long userId);
 }

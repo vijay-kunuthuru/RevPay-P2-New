@@ -14,6 +14,4 @@ public interface LoanRepository extends JpaRepository<Loan, Long> {
     List<Loan> findByUser_UserId(Long userId);
 
     Page<Loan> findByUser_UserId(Long userId, Pageable pageable);
-
-    boolean existsByIdempotencyKey(String idempotencyKey);
 }

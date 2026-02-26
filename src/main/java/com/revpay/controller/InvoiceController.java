@@ -93,6 +93,7 @@ public class InvoiceController {
         return ResponseEntity.ok(ApiResponse.success(dtos, "Invoices retrieved successfully"));
     }
 
+    // ---> NEW SEND ENDPOINT <---
     @PostMapping("/invoices/{id}/send")
     @Operation(summary = "Send an invoice", description = "Changes invoice status from DRAFT to SENT and notifies the customer.")
     public ResponseEntity<ApiResponse<String>> sendInvoice(

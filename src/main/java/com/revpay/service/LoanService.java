@@ -2,7 +2,6 @@ package com.revpay.service;
 
 import com.revpay.model.dto.*;
 import com.revpay.model.entity.*;
-import com.revpay.repository.IdempotencyRepository;
 import com.revpay.repository.LoanInstallmentRepository;
 import com.revpay.repository.LoanRepository;
 import com.revpay.repository.UserRepository;
@@ -30,8 +29,6 @@ public class LoanService {
     private final WalletService walletService;
     private final LoanInstallmentRepository installmentRepository;
     private final NotificationService notificationService;
-    private final IdempotencyRepository idempotencyRepository;
-
 
     private static final BigDecimal PRE_CLOSURE_RATE   = new BigDecimal("0.02");
     private static final BigDecimal MEDIUM_RISK_FACTOR = new BigDecimal("0.7");
@@ -56,24 +53,12 @@ public class LoanService {
             throw new IllegalArgumentException("Loan amount exceeds eligibility limit");
         }
 
-        if (loanRepository.existsByIdempotencyKey(dto.getIdempotencyKey())) {
-            throw new IllegalArgumentException("Duplicate loan application detected.");
-        }
-
         Loan loan = Loan.builder()
                 .user(user)
                 .amount(dto.getAmount())
                 .tenureMonths(dto.getTenureMonths())
                 .remainingAmount(dto.getAmount())
                 .purpose(dto.getPurpose())
-                .loanType(dto.getLoanType())
-                .idempotencyKey(dto.getIdempotencyKey())
-                .currency(dto.getCurrency())
-                .supportingDocumentUrl(
-                        dto.getDocumentName() != null
-                                ? "/documents/loan/" + userId + "/" + dto.getDocumentName()
-                                : null
-                )
                 .status(LoanStatus.APPLIED)
                 .build();
 
@@ -89,17 +74,9 @@ public class LoanService {
         return LoanResponseDTO.builder()
                 .loanId(loan.getLoanId())
                 .amount(loan.getAmount())
-                .interestRate(loan.getInterestRate())
-                .tenureMonths(loan.getTenureMonths())
                 .emiAmount(BigDecimal.ZERO)
                 .remainingAmount(loan.getRemainingAmount())
-                .totalPaid(BigDecimal.ZERO)
-                .purpose(loan.getPurpose())
                 .status(loan.getStatus())
-                .startDate(loan.getStartDate())
-                .endDate(loan.getEndDate())
-                .nextDueDate(null)
-                .currency(loan.getCurrency())
                 .build();
     }
 
@@ -193,13 +170,7 @@ public class LoanService {
 
     @Transactional
     public String repayLoan(Long userId, LoanRepayDTO dto) {
-
         log.info("Loan repayment initiated for loanId: {} by userId: {}", dto.getLoanId(), userId);
-
-        if (idempotencyRepository.existsById(dto.getIdempotencyKey())) {
-            log.warn("Duplicate repayment detected for key: {}", dto.getIdempotencyKey());
-            throw new IllegalArgumentException("Duplicate repayment request");
-        }
 
         Loan loan = loanRepository.findById(dto.getLoanId())
                 .orElseThrow(() -> {
@@ -234,8 +205,7 @@ public class LoanService {
         if (nextInstallment.getStatus() == InstallmentStatus.OVERDUE) {
             penalty       = OVERDUE_PENALTY;
             payableAmount = emiAmount.add(penalty);
-            log.warn("Overdue EMI detected. Penalty of ₹{} applied for loanId: {}",
-                    penalty, loan.getLoanId());
+            log.warn("Overdue EMI detected. Penalty of ₹100 applied for loanId: {}", loan.getLoanId());
         }
 
         walletService.withdrawFundsForLoan(
@@ -243,12 +213,10 @@ public class LoanService {
                 payableAmount,
                 "Loan Repayment #" + loan.getLoanId()
         );
-
         log.info("Amount {} deducted from wallet for userId: {}", payableAmount, userId);
 
         nextInstallment.setStatus(InstallmentStatus.PAID);
         installmentRepository.save(nextInstallment);
-
         log.info("Installment {} marked as PAID for loanId: {}",
                 nextInstallment.getInstallmentNumber(), loan.getLoanId());
 
@@ -262,20 +230,11 @@ public class LoanService {
 
         loanRepository.save(loan);
 
-        idempotencyRepository.save(
-                IdempotencyKey.builder()
-                        .key(dto.getIdempotencyKey())
-                        .requestPath("LOAN_REPAYMENT")
-                        .build()
-        );
-
-        // 🔔 Notification
         notificationService.createNotification(
                 loan.getUser().getUserId(),
                 NotificationUtil.loanRepayment(payableAmount),
                 "LOAN"
         );
-
         log.info("Repayment notification sent for loanId: {}", loan.getLoanId());
 
         return "EMI Paid Successfully";

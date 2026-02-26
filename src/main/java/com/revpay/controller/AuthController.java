@@ -71,42 +71,6 @@ public class AuthController {
         return ResponseEntity.ok(ApiResponse.success(null, "User registered successfully!"));
     }
 
-    @PutMapping("/update-profile")
-    @Operation(
-            summary = "Update user profile",
-            description = "Updates profile information for the currently authenticated user."
-    )
-    public ResponseEntity<ApiResponse<String>> updateProfile(
-            @Valid @RequestBody SignupRequest request) {
-
-        Long currentUserId = getAuthenticatedUserId();
-        log.info("Profile update initiated by userId: {}", currentUserId);
-
-        authService.updateProfile(currentUserId, request);
-
-        log.info("Profile updated successfully for userId: {}", currentUserId);
-        return ResponseEntity.ok(
-                ApiResponse.success(null, "Profile updated successfully"));
-    }
-
-    @PutMapping("/update-transaction-pin")
-    @Operation(
-            summary = "Update transaction PIN",
-            description = "Updates or sets the transaction PIN for the currently authenticated user."
-    )
-    public ResponseEntity<ApiResponse<String>> updateTransactionPin(
-            @Valid @RequestBody UpdatePasswordRequest request) {
-
-        Long currentUserId = getAuthenticatedUserId();
-        log.info("Transaction PIN update initiated by userId: {}", currentUserId);
-
-        authService.updateTransactionPin(currentUserId, request);
-
-        log.info("Transaction PIN updated successfully for userId: {}", currentUserId);
-        return ResponseEntity.ok(
-                ApiResponse.success(null, "Transaction PIN updated successfully"));
-    }
-
     @PostMapping("/forgot-password")
     @Operation(summary = "Get security question", description = "Retrieves the security question registered to the provided email address for password recovery.")
     public ResponseEntity<ApiResponse<String>> getSecurityQuestion(@Valid @RequestBody ForgotPasswordRequest request) {

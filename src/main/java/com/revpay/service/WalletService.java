@@ -372,7 +372,14 @@ public class WalletService {
         tx.setType(Transaction.TransactionType.ADD_FUNDS);
         tx.setStatus(Transaction.TransactionStatus.COMPLETED);
         tx.setTransactionRef(generateRef());
-        tx.setDescription("Added via: " + description);
+
+        String desc = "Added Funds";
+        if (description != null && !description.trim().isEmpty()) {
+            desc = "Added via: " + description;
+        } else if (cardId != null) {
+            desc = "Added via Card";
+        }
+        tx.setDescription(desc);
 
         notificationService.createNotification(userId, NotificationUtil.walletCredited(amount), "WALLET");
         return transactionRepository.save(tx);
@@ -589,7 +596,13 @@ public class WalletService {
 
         int start = (int) pageable.getOffset();
         int end = Math.min((start + pageable.getPageSize()), filtered.size());
-        List<Transaction> subList = start <= end ? filtered.subList(start, end) : List.of();
+
+        List<Transaction> subList;
+        if (start <= end && start < filtered.size()) {
+            subList = filtered.subList(start, end);
+        } else {
+            subList = List.of();
+        }
 
         return new PageImpl<>(subList, pageable, filtered.size());
     }

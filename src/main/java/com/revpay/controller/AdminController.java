@@ -45,7 +45,7 @@ public class AdminController {
         }
 
         public record UserAdminDTO(Long userId, String email, String fullName, String phoneNumber, String role,
-                        boolean isActive, boolean isVerified) {
+                        boolean isActive, boolean isVerified, LocalDateTime createdAt) {
         }
 
         public record TransactionAdminDTO(Long transactionId, Long senderId, String senderName, String senderEmail,
@@ -66,7 +66,7 @@ public class AdminController {
                 Page<UserAdminDTO> users = adminService.getAllUsers(pageable)
                                 .map(u -> new UserAdminDTO(u.getUserId(), u.getEmail(), u.getFullName(),
                                                 u.getPhoneNumber(),
-                                                u.getRole().name(), u.isActive(), u.isVerified()));
+                                                u.getRole().name(), u.isActive(), u.isVerified(), u.getCreatedAt()));
                 return ResponseEntity.ok(ApiResponse.success(users, "Users retrieved successfully"));
         }
 

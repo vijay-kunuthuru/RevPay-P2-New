@@ -47,7 +47,13 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
 
-        configuration.setAllowedOrigins(List.of("http://localhost:4200"));
+        // allow localhost for development plus the deployed EC2 hostname
+        configuration.setAllowedOrigins(List.of(
+                "http://localhost:4200",
+                "http://localhost",
+                "http://ec2-13-61-216-221.eu-north-1.compute.amazonaws.com",
+                "https://ec2-13-61-216-221.eu-north-1.compute.amazonaws.com"
+        ));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
 
         // CRITICAL FIX: Added "Idempotency-Key" so the frontend can send it without CORS blocking

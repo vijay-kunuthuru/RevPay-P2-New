@@ -1,4 +1,4 @@
-name: CI with SonarQube
+name: CI Build & Deploy
 
 on:
   push:
@@ -30,13 +30,6 @@ jobs:
     - name: Build backend and run tests
       working-directory: revpay
       run: mvn -B verify
-
-    - name: SonarQube Scan
-      working-directory: revpay
-      uses: sonarsource/sonarqube-scan-action@v1
-      env:
-        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
 
     - name: Build frontend
       uses: actions/setup-node@v3

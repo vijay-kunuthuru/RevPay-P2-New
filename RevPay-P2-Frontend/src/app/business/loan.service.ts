@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { ApiResponse } from '../shared/models/models';
+import { environment } from '../shared/constants';
 
 export interface LoanDTO {
     loanId: number;
@@ -45,7 +46,7 @@ export interface LoanAnalyticsDTO {
     providedIn: 'root'
 })
 export class LoanService {
-    private apiUrl = 'http://localhost:8080/api/v1/loans';
+    private apiUrl = `${environment.apiUrl}/loans`;
 
     constructor(private http: HttpClient) { }
 

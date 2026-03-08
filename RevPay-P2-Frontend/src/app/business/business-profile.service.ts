@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { ApiResponse } from '../shared/models/models';
+import { environment } from '../shared/constants';
 
 export interface BusinessProfileDTO {
     profileId: number;
@@ -16,7 +17,7 @@ export interface BusinessProfileDTO {
     providedIn: 'root'
 })
 export class BusinessProfileService {
-    private apiUrl = 'http://localhost:8080/api/v1/business/profile';
+    private apiUrl = `${environment.apiUrl}/business/profile`;
 
     constructor(private http: HttpClient) { }
 

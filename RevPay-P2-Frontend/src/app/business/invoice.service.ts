@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { ApiResponse } from '../shared/models/models';
+import { environment } from '../shared/constants';
 
 export interface InvoiceDTO {
     id: number;
@@ -24,7 +25,7 @@ export interface InvoiceCreateRequest {
     providedIn: 'root'
 })
 export class InvoiceService {
-    private apiUrl = 'http://localhost:8080/api/v1/business/invoices';
+    private apiUrl = `${environment.apiUrl}/business/invoices`;
 
     constructor(private http: HttpClient) { }
 
@@ -33,7 +34,7 @@ export class InvoiceService {
     }
 
     getInvoices(profileId: number, page: number = 0, size: number = 10): Observable<ApiResponse<any>> {
-        return this.http.get<ApiResponse<any>>(`http://localhost:8080/api/v1/business/${profileId}/invoices?page=${page}&size=${size}`);
+        return this.http.get<ApiResponse<any>>(`${environment.apiUrl}/business/${profileId}/invoices?page=${page}&size=${size}`);
     }
 
     sendInvoice(id: number): Observable<ApiResponse<string>> {
